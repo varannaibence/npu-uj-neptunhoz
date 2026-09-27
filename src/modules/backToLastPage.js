@@ -15,7 +15,9 @@ const STORAGE_KEY = "lastPage";
 // Shown in the settings panel; `id` is also the key the switch is stored under.
 const meta = {
   id: "backToLastPage",
+  group: "comfort",
   name: "Vissza a legutóbbi oldalra",
+  where: "Bejelentkezés után, felugró értesítésben",
   description: "Bejelentkezés után felajánlja, hogy visszavigyen oda, ahol jártál.",
 };
 

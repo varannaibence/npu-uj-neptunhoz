@@ -30,7 +30,9 @@ const UNTYPED_NOTE =
 // Shown in the settings panel; `id` is also the key the switch is stored under.
 const meta = {
   id: "creditBreakdown",
+  group: "comfort",
   name: "Kreditbontás a fejlécben",
+  where: "Tárgyak › Tárgyfelvétel: a fejléc „Felvett kredit” kártyája",
   description: "A felvett kreditet tárgytípusonként bontja a Neptun saját kártyáján.",
   // This module issues the ScheduledSubjectsWithScheduledCourses GET that two other
   // modules only listen to. Switching it off silently takes their data with it, so
@@ -174,6 +176,8 @@ function initialize() {
     }
     state.asked = true;
     const xhr = new XMLHttpRequest();
+    // Ours, not the page's: Neptun's logout countdown does not see it.
+    xhr.__npuOwn = true;
     xhr.open("GET", `${API_BASE}${ENDPOINT}?request.termId=${state.termId}&request.withRegisteredSubjects=true`);
     xhr.setRequestHeader("Authorization", auth);
     xhr.timeout = 30000;

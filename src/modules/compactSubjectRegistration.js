@@ -8,7 +8,9 @@ const ROOT_ATTRIBUTE = "data-npu-compact-subject-registration";
 
 const meta = {
   id: "compactSubjectRegistration",
+  group: "registration",
   name: "Kompakt tárgyfelvételi nézet",
+  where: "Tárgyak › Tárgyfelvétel, nagy asztali kijelzőn",
   description: "Szélesebb és sűrűbb tárgy- és kurzuslistát használ nagy asztali kijelzőn.",
   defaultEnabled: false,
 };

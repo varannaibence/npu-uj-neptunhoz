@@ -118,10 +118,25 @@ const unsubscribeAuthLoss = interceptor.onAuthChange(auth => {
   observedAuthLoss = auth;
 });
 authXhr.send();
+// Measured: the page sends some API calls without Authorization at all. That is not
+// a logout; taking it for one wiped the Neptun code right after every page load.
+const anonymousXhr = new fakeWindow.XMLHttpRequest();
+anonymousXhr.open("GET", "/hallgato_ng/api/General/GetHWebErrorReportingEmailSystemParameter");
+anonymousXhr.send();
+assert.strictEqual(observedAuthLoss, undefined, "an anonymous page call leaves the session alone");
+assert.strictEqual(interceptor.getAuthHeader(), "Bearer next-token");
+assert.strictEqual(interceptor.isAuthSignal("Account/Authenticate", null), true);
+assert.strictEqual(
+  interceptor.isAuthSignal("Account/SomethingUnmeasured", null),
+  false,
+  "only the measured login call is a header-less boundary"
+);
+assert.strictEqual(interceptor.isAuthSignal("General/GetHWebErrorReportingEmailSystemParameter", null), false);
+assert.strictEqual(interceptor.isAuthSignal("UserInfo", "Bearer x"), true);
 const noAuthXhr = new fakeWindow.XMLHttpRequest();
-noAuthXhr.open("GET", "/hallgato_ng/api/UserInfo");
+noAuthXhr.open("POST", "/hallgato_ng/api/Account/Authenticate");
 noAuthXhr.send();
-assert.strictEqual(observedAuthLoss, null, "an API request without Authorization reports auth disappearance");
+assert.strictEqual(observedAuthLoss, null, "a header-less login call reports auth disappearance");
 assert.strictEqual(interceptor.getAuthHeader(), null, "a missing API Authorization header cannot retain the old token");
 unsubscribeAuthLoss();
 
@@ -151,5 +166,68 @@ assert.strictEqual(interceptor.getAuthHeader(), "Bearer fresh", "a new Authoriza
 interceptor.clearAuthHeader();
 interceptor.allowAuthRetry();
 unsubscribeAuthFailure();
+
+// --- the 5-minute token: a renewal within one session is not a new user ---
+// Artificial JWTs with only the claims the code reads; the signature is never checked.
+const fakeJwt = claims => `Bearer x.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.sig`;
+assert.deepStrictEqual(
+  interceptor.readAuthClaims(fakeJwt({ SessionId: "s-1", iat: 1000, exp: 1300 })),
+  { sessionId: "s-1", issuedAtMs: 1000000, expiresAtMs: 1300000 },
+  "SessionId and the token's lifetime, in ms"
+);
+assert.deepStrictEqual(
+  interceptor.readAuthClaims("Bearer not-a-jwt"),
+  { sessionId: null, issuedAtMs: null, expiresAtMs: null },
+  "an unreadable header yields nothing, never a guess"
+);
+assert.strictEqual(interceptor.isUserBoundary("s-1", "h", "s-1", undefined), false, "renewed token, same session");
+assert.strictEqual(interceptor.isUserBoundary("s-1", "h", "s-2", undefined), true, "another login");
+assert.strictEqual(interceptor.isUserBoundary("s-1", "h", null, undefined), true, "unreadable: fail closed");
+assert.strictEqual(interceptor.isUserBoundary(null, "h", "s-1", undefined), true, "first sight of a session");
+assert.strictEqual(interceptor.isUserBoundary("s-1", null, null, 401), false, "a 401 only says the token died");
+assert.strictEqual(interceptor.isUserBoundary("s-1", null, null, undefined), true, "a header-less request is logout");
+
+{
+  const events = [];
+  const unsubscribe = interceptor.onAuthChange((auth, info) => {
+    events.push({ auth: Boolean(auth), userBoundary: info.userBoundary, previous: info.previousSessionId });
+  });
+  const request = (header, status) => {
+    const req = new fakeWindow.XMLHttpRequest();
+    req.open("GET", `/hallgato_ng/api/${header ? "SubjectApplication/SchedulableSubjects" : "Account/Authenticate"}`);
+    if (header) {
+      req.setRequestHeader("Authorization", header);
+    }
+    req.status = status || 200;
+    req.send();
+  };
+  request(fakeJwt({ SessionId: "s-1", iat: 1000, exp: 1300 }));
+  request(fakeJwt({ SessionId: "s-1", iat: 1300, exp: 1600 }));
+  assert.deepStrictEqual(interceptor.getAuthTiming(), { issuedAtMs: 1300000, expiresAtMs: 1600000 });
+  request(fakeJwt({ SessionId: "s-1", iat: 1600, exp: 1900 }), 401);
+  assert.deepStrictEqual(
+    interceptor.getAuthTiming(),
+    { issuedAtMs: 1600000, expiresAtMs: 1900000 },
+    "a retired header keeps its timing for the keep-alive"
+  );
+  request(fakeJwt({ SessionId: "s-1", iat: 1900, exp: 2200 }));
+  request(fakeJwt({ SessionId: "s-2", iat: 2000, exp: 2300 }));
+  request(null);
+  // The next login: its first request is a boundary FROM no session. index.js keeps
+  // the code the login response set, and clears only when leaving a known session.
+  request(fakeJwt({ SessionId: "s-3", iat: 3000, exp: 3300 }));
+  assert.deepStrictEqual(events, [
+    { auth: true, userBoundary: true, previous: null },
+    { auth: true, userBoundary: false, previous: "s-1" },
+    { auth: true, userBoundary: false, previous: "s-1" },
+    { auth: false, userBoundary: false, previous: "s-1" },
+    { auth: true, userBoundary: false, previous: "s-1" },
+    { auth: true, userBoundary: true, previous: "s-1" },
+    { auth: false, userBoundary: true, previous: "s-2" },
+    { auth: true, userBoundary: true, previous: null },
+  ]);
+  unsubscribe();
+  interceptor.allowAuthRetry();
+}
 
 module.exports = { fakeWindow };

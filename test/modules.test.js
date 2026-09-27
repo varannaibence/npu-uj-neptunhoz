@@ -1,8 +1,6 @@
 const assert = require("assert");
-const interceptor = require("../src/interceptor");
 const infiniteSession = require("../src/modules/infiniteSession");
 const { fakeRow } = require("./helpers");
-const { fakeWindow } = require("./interceptor.test");
 
 // --- footerBranding: the name and a bug link, beside Neptun's own footer logo ---
 const footerBranding = require("../src/modules/footerBranding");
@@ -418,110 +416,32 @@ assert.deepStrictEqual(
 );
 assert.deepStrictEqual(occupancy.restoreOrder([], [rowA, rowB]), [rowA, rowB], "an empty snapshot changes nothing");
 
-// --- infiniteSession: the "should I refresh now?" decision ---
-const ACTIVE = 2 * 60 * 1000;
-const MARGIN = 2 * 60 * 1000;
-// near expiry, active a moment ago -> refresh
-assert.strictEqual(infiniteSession.shouldRefresh(100000, 101000, 99000, ACTIVE, MARGIN), true);
-// near expiry, but idle well beyond the active window -> let it expire
-assert.strictEqual(infiniteSession.shouldRefresh(300000, 301000, 50000, ACTIVE, MARGIN), false);
-// active right now, but expiry is nowhere close -> nothing to do yet
-assert.strictEqual(infiniteSession.shouldRefresh(100000, 10000000, 99999, ACTIVE, MARGIN), false);
-// both conditions fail at once
-assert.strictEqual(infiniteSession.shouldRefresh(100000, 10000000, 1000, ACTIVE, MARGIN), false);
-assert.strictEqual(
-  infiniteSession.shouldRefresh(100000, 101000, null, ACTIVE, MARGIN),
-  false,
-  "opening an idle tab is not activity"
-);
-
-// The old idle-expiry dialog and its countdown are gone, rather than hidden behind
-// CSS or left as dead timer branches.
-assert.strictEqual(infiniteSession.shouldWarn, undefined, "the expiry-warning decision is removed with the modal");
-assert.strictEqual(infiniteSession.formatRemaining, undefined, "the unused expiry countdown is removed with the modal");
-
-// The silent refresh path remains authenticated and uses the app's own endpoint.
-// A missing observed Authorization header must not cause any request.
-class RefreshFakeXHR {
-  constructor() {
-    this.headers = {};
-    this.listeners = {};
-  }
-
-  open(method, url) {
-    this.method = method;
-    this.url = url;
-  }
-
-  setRequestHeader(name, value) {
-    this.headers[name] = value;
-  }
-
-  addEventListener(type, fn) {
-    (this.listeners[type] = this.listeners[type] || []).push(fn);
-  }
-
-  send(body) {
-    this.body = body;
-    (this.listeners.loadend || []).forEach(fn => fn());
-  }
+// --- infiniteSession: Neptun renews, never the NPU ---
+// Its own GetNewTokens left Neptun's countdown running and raced the page's renewal
+// into a 401 (measured), so the module has no request of its own any more. It presses
+// search only when Neptun is about to log out, so a reader's view is left alone.
+assert.strictEqual(infiniteSession.refresh, undefined, "no GetNewTokens of our own");
+{
+  const minute = 60 * 1000;
+  const now = 100 * minute;
+  assert.strictEqual(infiniteSession.keepAliveDue(now, now - 10 * minute, null), false, "someone reading: leave it");
+  assert.strictEqual(infiniteSession.keepAliveDue(now, now - 13 * minute, null), true, "logout is near: press");
+  assert.strictEqual(infiniteSession.keepAliveDue(now, now - 13 * minute, now - 30000), false, "not twice at once");
+  assert.strictEqual(infiniteSession.keepAliveDue(now, null, null), false, "no page request seen yet");
+  // The cookie lasts 15 minutes from the last RENEWAL, which can predate the last
+  // request: an old, expired token presses even while the page is only 6 minutes quiet.
+  const old = { issuedAtMs: now - 11 * minute, expiresAtMs: now - 6 * minute };
+  assert.strictEqual(infiniteSession.keepAliveDue(now, now - 6 * minute, null, old), true, "renewal is 11 minutes old");
+  assert.strictEqual(
+    infiniteSession.keepAliveDue(now, now - 6 * minute, null, {
+      issuedAtMs: now - 4 * minute,
+      expiresAtMs: now + minute,
+    }),
+    false,
+    "a live token cannot be renewed by a press"
+  );
+  assert.strictEqual(infiniteSession.keepAliveDue(now, now - 6 * minute, now - 30000, old), false, "not twice at once");
 }
-
-const previousRefreshXHR = global.XMLHttpRequest;
-const refreshRequests = [];
-global.XMLHttpRequest = class extends RefreshFakeXHR {
-  constructor() {
-    super();
-    refreshRequests.push(this);
-  }
-};
-try {
-  interceptor.clearAuthHeader();
-  infiniteSession.refresh();
-  assert.strictEqual(refreshRequests.length, 0, "keep-alive must not invent an Authorization header");
-
-  const refreshAuthXhr = new fakeWindow.XMLHttpRequest();
-  refreshAuthXhr.open("GET", "/hallgato_ng/api/UserInfo");
-  refreshAuthXhr.setRequestHeader("Authorization", "Bearer refresh-token");
-  refreshAuthXhr.send();
-  infiniteSession.refresh();
-  assert.strictEqual(refreshRequests.length, 1, "recently observed app auth enables silent refresh");
-  assert.strictEqual(refreshRequests[0].method, "POST");
-  assert.strictEqual(refreshRequests[0].url, "/hallgato_ng/api/Account/GetNewTokens");
-  assert.strictEqual(refreshRequests[0].body, "{}");
-  assert.strictEqual(refreshRequests[0].headers.Authorization, "Bearer refresh-token");
-  assert.strictEqual(refreshRequests[0].headers["Content-Type"], "application/json");
-} finally {
-  interceptor.clearAuthHeader();
-  if (typeof previousRefreshXHR === "undefined") {
-    delete global.XMLHttpRequest;
-  } else {
-    global.XMLHttpRequest = previousRefreshXHR;
-  }
-}
-
-// sessionTimeoutInMinutes read off either shape it's measured to arrive in
-assert.strictEqual(
-  infiniteSession.readTimeoutMinutes({ sessionTimeoutInMinutes: 20 }, 15),
-  20,
-  "top-level, as GetNewTokens returns it"
-);
-assert.strictEqual(
-  infiniteSession.readTimeoutMinutes({ data: { sessionTimeoutInMinutes: 12 } }, 15),
-  12,
-  "nested, as Authenticate returns it"
-);
-assert.strictEqual(
-  infiniteSession.readTimeoutMinutes({ notification: [] }, 15),
-  15,
-  "not present - keep the previous value"
-);
-assert.strictEqual(infiniteSession.readTimeoutMinutes(null, 15), 15, "not every response body is an object");
-assert.strictEqual(
-  infiniteSession.readTimeoutMinutes({ sessionTimeoutInMinutes: 0 }, 15),
-  15,
-  "a bogus 0 must not overwrite a real value"
-);
 
 // --- paginationFixes: the row window is moved, not just capped ---
 const pagination = require("../src/modules/paginationFixes");

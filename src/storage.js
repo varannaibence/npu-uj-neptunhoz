@@ -119,8 +119,9 @@ function set(...keysAndValue) {
   }
   // During initialization the initialization save replays and persists the
   // pending mutation itself; returning that Promise keeps callers awaitable
-  // without creating a queue cycle.
-  return initializationPromise || queueSave();
+  // without creating a queue cycle. Resolves true once written: GM.setValue itself
+  // resolves undefined, which read as a failed save ("nem menthető") every time.
+  return (initializationPromise || queueSave()).then(() => true);
 }
 
 // Gets the specified property or all data of the current user

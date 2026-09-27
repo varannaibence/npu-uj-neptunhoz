@@ -18,6 +18,8 @@ const modules = [
   require("./modules/infiniteSession"),
   require("./modules/rajtolo"),
   require("./modules/creditBreakdown"),
+  require("./modules/dailyOverview"),
+  require("./modules/gradeCalculator"),
   require("./modules/footerBranding"),
   require("./modules/updateNotice"),
 ];
@@ -35,10 +37,23 @@ interceptor.onResponse(/^(UserInfo|Account\/Authenticate)$/, json => {
   }
 });
 
-// A changed or missing auth header is a user-state boundary. Do not let a later
-// account reuse the previous account's in-memory plan or registration baseline.
-interceptor.onAuthChange(() => {
-  utils.setNeptunCode(null);
+// Logout lands on the login page before any header-less Account/* call shows it.
+router.onChange(path => {
+  if (/\/login\/?$/.test(path || "")) {
+    interceptor.clearAuthHeader();
+  }
+});
+
+// Logout or another login is a user-state boundary: do not let a later account reuse
+// the previous one's in-memory plan or registration baseline. A token renewed within
+// the same session is not one; it happens every five minutes. Only a boundary AWAY
+// from a known session clears the code: after a logout (already cleared) the next
+// login's first request is a boundary too, and clearing there wiped the code the
+// login response had just set.
+interceptor.onAuthChange((auth, info) => {
+  if (info && info.userBoundary && info.previousSessionId) {
+    utils.setNeptunCode(null);
+  }
 });
 
 // Synchronous on purpose: a module registering an interceptor handler must do so

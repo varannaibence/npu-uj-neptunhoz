@@ -211,6 +211,12 @@ function recognisePlannerRow(row) {
     slots: courseSlots(row, row[scheduleField]),
     code: typeof row.code === "string" ? row.code.trim() : "",
     subjectTitle: typeof row.title === "string" ? row.title : "",
+    // The four ids GetSubjectsCourses and SubjectSignin take, measured on these rows
+    // too, so a subject planned only in Neptun's own planner can still be looked up.
+    termId: typeof row.termId === "string" && row.termId ? row.termId : null,
+    curriculumTemplateId: typeof row.curriculumTemplateId === "string" ? row.curriculumTemplateId : null,
+    curriculumTemplateLineId: typeof row.curriculumTemplateLineId === "string" ? row.curriculumTemplateLineId : null,
+    type: typeof row.type === "string" ? row.type : "",
     // Measured present on this endpoint's rows too, and optional on purpose: none of
     // these gate recognition, or a single missing optional field would make an
     // otherwise-fine response unrecognised and cost the whole page baselineComplete.
@@ -255,13 +261,15 @@ function buildBaseline(subjects, courses, plannerEntries) {
   const byCourse = new Map();
   const unknownSubject = { title: "", code: "" };
 
-  function consider(courseId, source, course, subject) {
+  // `origin` says which source it was: a view that acts on the planner trusts only
+  // "planner", since the per-subject list is not re-read after a planner write.
+  function consider(courseId, source, course, subject, origin) {
     if (!courseId || !source || !course) {
       return;
     }
     const existing = byCourse.get(courseId);
     if (!existing || SOURCE_RANK[source] > SOURCE_RANK[existing.source]) {
-      byCourse.set(courseId, { course, subject: subject || unknownSubject, source });
+      byCourse.set(courseId, { course, subject: subject || unknownSubject, source, origin });
     }
   }
 
@@ -269,7 +277,7 @@ function buildBaseline(subjects, courses, plannerEntries) {
   // it (courseConflictHints' strongest available signal).
   courses.forEach(course => {
     if (course.isSigned) {
-      consider(course.id, "registered", course, subjects.get(course.subjectId));
+      consider(course.id, "registered", course, subjects.get(course.subjectId), "course");
     }
   });
 
@@ -283,7 +291,7 @@ function buildBaseline(subjects, courses, plannerEntries) {
       id: entry.id,
       subjectId: entry.subjectId,
       code: entry.code,
-      type: "",
+      type: entry.type || "",
       isSigned: entry.source === "registered",
       slots: entry.slots,
       tutorName: entry.tutorName,
@@ -297,9 +305,15 @@ function buildBaseline(subjects, courses, plannerEntries) {
       willBeOnWaitingList: entry.willBeOnWaitingList,
       isOnWaitingList: entry.isOnWaitingList,
     };
-    const subject =
-      subjects.get(entry.subjectId) || (entry.subjectTitle ? { title: entry.subjectTitle, code: "" } : undefined);
-    consider(entry.id, entry.source, course, subject);
+    const subject = subjects.get(entry.subjectId) || {
+      subjectId: entry.subjectId,
+      title: entry.subjectTitle || "",
+      code: "",
+      termId: entry.termId,
+      curriculumTemplateId: entry.curriculumTemplateId,
+      curriculumTemplateLineId: entry.curriculumTemplateLineId,
+    };
+    consider(entry.id, entry.source, course, subject, "planner");
   });
 
   // 3) Neptun's own native per-subject plan. Kept as a last resort exactly because
@@ -311,7 +325,7 @@ function buildBaseline(subjects, courses, plannerEntries) {
       if (!course) {
         return;
       }
-      consider(courseId, subject.source, course, subject);
+      consider(courseId, subject.source, course, subject, "subject");
     });
   });
 
@@ -447,6 +461,8 @@ function schedulePlannerFallback() {
     let settled = false;
     try {
       const xhr = new XMLHttpRequest();
+      // Ours, not the page's: Neptun's logout countdown does not see it.
+      xhr.__npuOwn = true;
       plannerFallbackRequest = xhr;
       plannerFallbackInFlight = true;
       const finish = success => {
@@ -496,6 +512,48 @@ function schedulePlannerFallback() {
       plannerFallbackFailedAuth = auth;
     }
   }, PLANNER_FALLBACK_DELAY_MS);
+}
+
+// A fresh planner read on demand, for a view about to act on what is planned. Whether
+// Neptun re-reads the planner after its own "Tervezőhöz adás" is unmeasured, so the
+// page's last response may predate the student's latest change. Resolves true once a
+// recognised answer is in the snapshot; a term change meanwhile discards it.
+function refreshPlanner() {
+  const auth = interceptor.getAuthHeader();
+  if (!auth || !activeNumericTermId || router.getPath() !== ROUTE) {
+    return Promise.resolve(false);
+  }
+  const url = `${API_BASE}${PLANNER_ENDPOINT}?request.termId=${activeNumericTermId}`;
+  const runGeneration = generation;
+  return new Promise(resolve => {
+    try {
+      const xhr = new XMLHttpRequest();
+      // Ours, not the page's: Neptun's logout countdown does not see it.
+      xhr.__npuOwn = true;
+      xhr.addEventListener("load", () => {
+        let json = null;
+        try {
+          json = JSON.parse(xhr.responseText);
+        } catch (e) {
+          json = null;
+        }
+        if (runGeneration !== generation || !isSuccessfulCollection(json, xhr.status)) {
+          resolve(false);
+          return;
+        }
+        ingestPlanner(json, { url, status: xhr.status }, router.getPath());
+        resolve(plannerRecognized);
+      });
+      xhr.addEventListener("error", () => resolve(false));
+      xhr.addEventListener("timeout", () => resolve(false));
+      xhr.open("GET", url);
+      xhr.setRequestHeader("Authorization", auth);
+      xhr.timeout = REQUEST_TIMEOUT_MS;
+      xhr.send(null);
+    } catch (e) {
+      resolve(false);
+    }
+  });
 }
 
 function termIn(json) {
@@ -647,9 +705,10 @@ function install() {
       plannerFallbackAsked = false;
       return;
     }
+    // A renewed token may retry a failed fallback, but must not repeat a successful
+    // one: that came every five minutes. A new user resets through the Neptun code.
     if (auth !== plannerFallbackFailedAuth) {
       plannerFallbackFailedAuth = null;
-      plannerFallbackAsked = false;
     }
     schedulePlannerFallback();
   });
@@ -681,4 +740,5 @@ module.exports = {
   isSuccessfulCollection,
   handleRouteChange,
   schedulePlannerFallback,
+  refreshPlanner,
 };

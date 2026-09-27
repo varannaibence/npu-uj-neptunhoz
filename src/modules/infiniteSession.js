@@ -1,125 +1,78 @@
-// Discreet keep-alive. The session is a ~15 min rolling window that any real API
-// call resets, so this hits the app's own refresh endpoint only when warranted:
+// Keeps the session alive, idle tab included, by making Neptun renew it itself.
 //
-//   near expiry AND recently active  -> one request
-//   otherwise                        -> let it expire
+// Measured on unideb (docs/API.md, GetNewTokens): Neptun logs out 15 minutes after
+// the page's last own API request, and only such a request resets that countdown. So
+// this never calls Account/GetNewTokens itself: that renewed the cookie but left the
+// countdown running, and racing the page's own renewal got a 401 after which the
+// session most likely was revoked. Instead, shortly before the logout would come, it
+// presses the page's "Tárgy keresése" button; the page renews if needed, then searches.
+// That reloads the subject list and saves the filter fields as they stand. Someone
+// clicking around sends requests and is left alone; someone only reading for 5-10
+// minutes can see the list reload - the price of not being logged out, since the
+// session cookie runs out 15 minutes after the last renewal, reading or not.
 //
-// The timer drives a local, free *check*; the network call it may trigger is always
-// conditional on real activity. A blind periodic ping is the bot-shaped pattern this
-// exists to avoid.
+// ponytail: only the course registration page has a measured, harmless trigger;
+// synthetic mouse and key events do not wake Neptun's own renewal. Elsewhere an idle
+// session still expires.
 const interceptor = require("../interceptor");
+const router = require("../router");
+const { ROUTE, KEEPALIVE_AGE_MS } = require("./rajtolo/constants");
+const { freshenAuth } = require("./rajtolo/net");
 
-// A refresh only counts as riding real usage if the user acted within this window.
-const ACTIVE_WINDOW_MS = 2 * 60 * 1000;
-// How close to expiry we start caring at all.
-const REFRESH_MARGIN_MS = 2 * 60 * 1000;
-// Fallback only, until the first response tells us the real number.
-const DEFAULT_TIMEOUT_MINUTES = 15;
-// These events fire far more often than the timestamp needs updating.
-const ACTIVITY_THROTTLE_MS = 5000;
-// How often "should I refresh now?" is re-evaluated.
+// A hidden tab runs this once a minute, so this lands 12.5-13.5 minutes into the
+// quiet: before Neptun's 15-minute logout, and past its own 2-minute warning only
+// when the tab is throttled.
 const CHECK_INTERVAL_MS = 30 * 1000;
-const REFRESH_TIMEOUT_MS = 30 * 1000;
-// The app's own refresh endpoint: POST {} → { accessToken, sessionTimeoutInMinutes }.
-const REFRESH_ENDPOINT = "/hallgato_ng/api/Account/GetNewTokens";
-
-let lastActivityAt = null;
-let sessionTimeoutMinutes = DEFAULT_TIMEOUT_MINUTES;
-let sessionExpiresAt = Date.now() + sessionTimeoutMinutes * 60 * 1000;
-let refreshInFlight = false;
-let activityThrottled = false;
+const QUIET_BEFORE_PRESS_MS = 12.5 * 60 * 1000;
+const RETRY_MS = 60 * 1000;
 
 // Shown in the settings panel; `id` is also the key the switch is stored under.
 const meta = {
   id: "infiniteSession",
+  group: "comfort",
   name: "Munkamenet életben tartása",
-  description: "Közeli lejáratkor, valódi használat mellett megújítja a munkamenetet. Tétlen lapot nem tart életben.",
+  where: "Tárgyak › Tárgyfelvétel, a háttérben (nincs saját gombja)",
+  description:
+    "A tárgyfelvételi oldalon tétlen fülnél is megakadályozza a kiléptetést: mielőtt a munkamenet lejárna (12,5 perc tétlenség, vagy 10 perce nem frissült token után), megnyomja a Neptun saját Tárgy keresése gombját. Más oldalon a munkamenet lejárhat.",
   defaultEnabled: false,
 };
+
+// Pure. Press when Neptun is about to log out: the page has been quiet for 12.5
+// minutes, or the last renewal is 10 minutes old and the token has run out - the
+// session cookie lasts 15 minutes from a RENEWAL, which may predate the last request
+// (constants.js), so quiet time alone presses too late about half the time. Not
+// again right after a press that brought nothing.
+function keepAliveDue(nowMs, lastPageRequestAt, lastAttemptAt, timing) {
+  if (typeof lastAttemptAt === "number" && nowMs - lastAttemptAt < RETRY_MS) {
+    return false;
+  }
+  const quiet = typeof lastPageRequestAt === "number" && nowMs - lastPageRequestAt >= QUIET_BEFORE_PRESS_MS;
+  const stale =
+    Boolean(timing) &&
+    typeof timing.issuedAtMs === "number" &&
+    typeof timing.expiresAtMs === "number" &&
+    timing.expiresAtMs <= nowMs &&
+    nowMs - timing.issuedAtMs >= KEEPALIVE_AGE_MS;
+  return quiet || stale;
+}
 
 function shouldActivate() {
   return true;
 }
 
-// Time is passed in rather than read, so this is checkable without a real clock.
-function shouldRefresh(now, expiresAt, lastActivity, activeWindowMs, marginMs) {
-  return typeof lastActivity === "number" && expiresAt - now < marginMs && now - lastActivity < activeWindowMs;
-}
-
-// sessionTimeoutInMinutes arrives top-level from GetNewTokens and under .data from
-// Authenticate. Falls back to whatever we already knew.
-function readTimeoutMinutes(body, previousMinutes) {
-  const fromTop = body && typeof body.sessionTimeoutInMinutes === "number" ? body.sessionTimeoutInMinutes : null;
-  const fromData =
-    body && body.data && typeof body.data.sessionTimeoutInMinutes === "number"
-      ? body.data.sessionTimeoutInMinutes
-      : null;
-  const minutes = fromTop || fromData;
-  return minutes > 0 ? minutes : previousMinutes;
-}
-
-// Carries the Authorization header captured off the app's own requests; a
-// same-origin call without it gets 401. No-ops if we have not seen one yet.
-function refresh() {
-  const auth = interceptor.getAuthHeader();
-  if (!auth || refreshInFlight) {
-    return;
-  }
-  refreshInFlight = true;
-  try {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", REFRESH_ENDPOINT);
-    xhr.setRequestHeader("Content-Type", "application/json");
-    xhr.setRequestHeader("Authorization", auth);
-    xhr.timeout = REFRESH_TIMEOUT_MS;
-    xhr.addEventListener("loadend", () => {
-      refreshInFlight = false;
-    });
-    xhr.send("{}");
-  } catch (e) {
-    refreshInFlight = false;
-  }
-}
-
-function onActivity() {
-  if (activityThrottled) {
-    return;
-  }
-  activityThrottled = true;
-  setTimeout(() => {
-    activityThrottled = false;
-  }, ACTIVITY_THROTTLE_MS);
-  lastActivityAt = Date.now();
-}
-
-// A genuinely idle session (tab left open overnight) is allowed to expire. Keeping
-// one alive needs idle traffic, which is the pattern this module exists to avoid.
-// A trade-off to keep, not a bug to fix.
 function initialize() {
-  ["visibilitychange", "pointerdown", "keydown", "scroll"].forEach(type => {
-    document.addEventListener(type, onActivity, { passive: true, capture: true });
-  });
-
-  // Any response is itself the signal that the server's window just reset.
-  interceptor.onResponse(/./, body => {
-    sessionTimeoutMinutes = readTimeoutMinutes(body, sessionTimeoutMinutes);
-    const nextExpiresAt = Date.now() + sessionTimeoutMinutes * 60 * 1000;
-    sessionExpiresAt = nextExpiresAt;
-  });
-
+  let lastAttemptAt = null;
   setInterval(() => {
     const now = Date.now();
-    if (shouldRefresh(now, sessionExpiresAt, lastActivityAt, ACTIVE_WINDOW_MS, REFRESH_MARGIN_MS)) {
-      refresh();
+    if (
+      router.getPath() !== ROUTE ||
+      !keepAliveDue(now, interceptor.getLastPageRequestAt(), lastAttemptAt, interceptor.getAuthTiming())
+    ) {
+      return;
     }
+    lastAttemptAt = now;
+    freshenAuth();
   }, CHECK_INTERVAL_MS);
 }
 
-module.exports = {
-  meta,
-  shouldActivate,
-  initialize,
-  shouldRefresh,
-  refresh,
-  readTimeoutMinutes,
-};
+module.exports = { meta, shouldActivate, initialize, keepAliveDue };

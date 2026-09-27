@@ -58,7 +58,9 @@ const naturalOrder = new WeakMap();
 // Shown in the settings panel; `id` is also the key the switch is stored under.
 const meta = {
   id: "occupancy",
+  group: "registration",
   name: "Férőhely és betelt állapot",
+  where: "Tárgyak › Tárgyfelvétel: a lenyitott tárgy kurzusainál, és a „Betelt kurzusok hátra” gomb a szűrők mellett",
   description:
     "Férőhelyet és betelt/várólista állapotot ír a betöltött kurzusokra, és előre rendezi azokat, amikre még lehet jelentkezni.",
 };
@@ -411,6 +413,7 @@ function buildToggle(referenceButton, enabled) {
   const toggle = utils.cloneButton(referenceButton);
   toggle.id = TOGGLE_ID;
   utils.setButtonLabel(toggle, TOGGLE_LABEL);
+  utils.markNpu(toggle, "A betelt kurzusok a lista végére kerülnek");
   paintToggle(toggle, enabled);
   return toggle;
 }

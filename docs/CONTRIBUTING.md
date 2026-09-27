@@ -28,6 +28,12 @@ const meta = {
   id: "példa",
   name: "Rövid, felhasználói név",
   description: "Egy mondat arról, mit csinál. Ezt olvassa a felhasználó.",
+  // Hol jelenik meg a Neptunban, a menü neveivel („Tárgyak › Tárgyfelvétel: …”).
+  // A panel „Hol:” sorként mutatja; a teszt minden modulnál és alopciónál
+  // megköveteli.
+  where: "Tárgyak › Tárgyfelvétel: gomb a szűrők mellett",
+  // Csoport a panelen és a README-ben: registration, rajtolo, daily, comfort.
+  group: "registration",
 };
 
 // Fusson-e ezen az oldalon? Olcsó és szinkron legyen.
@@ -80,6 +86,13 @@ A négy, amin a legtöbb PR elbukna:
   azonosító hiányzik, a kód csak ellenőrzött tartalékúton dönthet.
 - Minden DOM-érintés legyen guardolva. Eltérő felületen a modul ne dobjon
   hibát, hanem csendben ne csináljon semmit.
+
+Az oldalra tett minden NPU-vezérlőt (gomb, kapcsoló, indító) jelölj meg a
+`utils.markNpu(elem, "mit csinál")` hívással, a `setButtonLabel` után. Ez az
+NPU ikonját teszi a felirat elé, és „… – NPU-funkció” súgót ad, így senki sem
+hiszi a Neptun sajátjának, és nem az egyetemnek jelenti a hibáját. A
+`cloneButton` a jelölést leszedi, a `setButtonLabel` megtartja. Az NPU saját
+paneljein és ablakaiban lévő gombokat nem kell jelölni.
 
 **2. Legalább egy futtatható ellenőrzést** a `test/` alatt. A döntési logikát
 szervezd tiszta, exportált függvényekbe, és azokra írj `assert`-et. A

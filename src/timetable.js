@@ -30,7 +30,13 @@ function normaliseSlot(info) {
   if (typeof day !== "number" || start === null || end === null || end <= start) {
     return null;
   }
-  return { day, start, end, rooms: info.rooms || "", dayLabel: info.dayOfWeekText || "" };
+  const slot = { day, start, end, rooms: info.rooms || "", dayLabel: info.dayOfWeekText || "" };
+  // Every measured slot said `repetition: true`; what false means is unknown, so it
+  // is only flagged, and still checked as if it ran every week.
+  if (info.repetition === false) {
+    slot.irregular = true;
+  }
+  return slot;
 }
 
 // Some tutors leave Neptun's schedule empty and type the class into the course note

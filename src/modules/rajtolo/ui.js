@@ -5,7 +5,16 @@ const interceptor = require("../../interceptor");
 const tokens = require("../../neptunTokens");
 const { LAUNCHER_ID, PLANNER_ID, DEFAULT_DELAY_SECONDS } = require("./constants");
 const plan = require("./plan");
-const { chooseCombination, msUntilTarget, formatCountdown, statusLabel, courseLabel } = require("./protocol");
+const {
+  chooseCombination,
+  msUntilTarget,
+  wallClockToEpoch,
+  isNeptunTimeZone,
+  defaultPeriod,
+  formatCountdown,
+  statusLabel,
+  courseLabel,
+} = require("./protocol");
 const { liveGet, liveGetPeriods } = require("./net");
 
 let smallButtonCssInjected = false;
@@ -22,6 +31,7 @@ const {
   removeSubject,
   moveUp,
   moveDown,
+  swapCourses,
 } = plan;
 
 function persistPlan(state) {
@@ -39,7 +49,8 @@ function persistPlan(state) {
 function buildLauncher(referenceButton) {
   const launcher = utils.cloneButton(referenceButton);
   launcher.id = LAUNCHER_ID;
-  utils.setButtonLabel(launcher, "Rajtoló (NPU)");
+  utils.setButtonLabel(launcher, "Rajtoló");
+  utils.markNpu(launcher, "Ütemezett tárgyfelvétel");
   return launcher;
 }
 
@@ -146,9 +157,11 @@ function plannedCourseIds(subject) {
   return (subject.groups || []).reduce((ids, group) => ids.concat(group.ranking || []), []);
 }
 
-function loadPlannedCourses(state, force) {
+// One subject at a time with a short gap between them, never in parallel. `get` is
+// injectable so the queue is testable without a network.
+function loadPlannedCourses(state, force, get = liveGet) {
   if (state.courseLoadQueue) {
-    return;
+    return state.courseLoadQueue;
   }
   const targets = state.plan.subjects.slice();
   const generation = state.courseCatalogGeneration;
@@ -158,18 +171,19 @@ function loadPlannedCourses(state, force) {
         if (generation !== state.courseCatalogGeneration) {
           return undefined;
         }
-        if (index > 0) {
-          return new Promise(resolve => setTimeout(resolve, 150));
-        }
-        return loadPlannedCourse(state, subject, force, generation);
+        // The gap used to REPLACE the load for every subject after the first, so only
+        // the first planned subject ever got its course labels and conflict check.
+        const pause = index > 0 ? new Promise(resolve => setTimeout(resolve, 150)) : Promise.resolve();
+        return pause.then(() => loadPlannedCourse(state, subject, force, generation, get));
       });
     }, Promise.resolve())
     .finally(() => {
       state.courseLoadQueue = null;
     });
+  return state.courseLoadQueue;
 }
 
-function loadPlannedCourse(state, subject, force, generation) {
+function loadPlannedCourse(state, subject, force, generation, get = liveGet) {
   if (generation !== state.courseCatalogGeneration) {
     return Promise.resolve();
   }
@@ -189,7 +203,7 @@ function loadPlannedCourse(state, subject, force, generation) {
   state.courseLoads.add(subject.subjectId);
   state.courseLoadErrors.delete(subject.subjectId);
   render(state);
-  return liveGet(subject).then(json => {
+  return get(subject).then(json => {
     if (generation !== state.courseCatalogGeneration) {
       state.courseLoads.delete(subject.subjectId);
       return;
@@ -214,7 +228,7 @@ function selectedPeriod(state) {
 // would be a lie about a window that is over.
 function periodClosingText(state) {
   const period = selectedPeriod(state);
-  const targetMs = period && period.toDate ? Date.parse(period.toDate) : NaN;
+  const targetMs = period ? wallClockToEpoch(period.toDate) : NaN;
   if (Number.isNaN(targetMs)) {
     return null;
   }
@@ -248,8 +262,8 @@ function openPlanner(state) {
     ],
     onClose() {
       if (state.running && state.controller) {
-        state.controller.stop();
         state.statusText = "Leállítás folyamatban…";
+        state.controller.stop();
       }
       state.dialog = null;
     },
@@ -440,7 +454,8 @@ function render(state) {
   scheduleRow.style.cssText = "display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:16px;";
 
   const startLabel = document.createElement("label");
-  startLabel.textContent = "Nyitás időpontja: ";
+  // Said only where it matters: to someone whose browser is not on Hungarian time.
+  startLabel.textContent = isNeptunTimeZone() ? "Nyitás időpontja: " : "Nyitás időpontja (magyar idő szerint): ";
   const startInput = document.createElement("input");
   startInput.setAttribute("data-npu-focus-key", "start-at");
   startInput.type = "datetime-local";
@@ -457,9 +472,12 @@ function render(state) {
   // plus a button that copies the chosen fromDate into the field above. Fails quiet:
   // while state.periods is null this section simply does not exist. ---
   if (state.periods && state.periods.length > 0) {
-    // Keep the highlighted option valid rather than pointing at one that fell out.
+    // Keep the highlighted option valid rather than pointing at one that fell out. The
+    // first pick is the current or next period: the list's first entry is often one
+    // that is long over, and "Nyitás kitöltése" on it scheduled a run for the past.
     if (!state.periods.some(p => p.periodId === state.selectedPeriodId)) {
-      state.selectedPeriodId = state.periods[0].periodId;
+      const now = Date.now() + (interceptor.getServerOffsetMs() || 0);
+      state.selectedPeriodId = defaultPeriod(state.periods, now).periodId;
     }
     const periodSelect = document.createElement("select");
     periodSelect.setAttribute("data-npu-focus-key", "period");
@@ -679,8 +697,10 @@ function renderGroup(state, subject, group, coursesBySubject, groupIndex) {
     const up = smallButton("▲", "Előrébb");
     up.setAttribute("data-npu-focus-key", `subject-${subject.subjectId}-group-${groupIndex}-${courseIndex}-up`);
     up.disabled = state.running || courseIndex === 0;
+    // `group` may be a pruned copy (see renderSubjectRow), so the move goes through
+    // the plan itself, by course id.
     up.addEventListener("click", () => {
-      group.ranking = moveUp(group.ranking, courseIndex);
+      state.plan = swapCourses(state.plan, subject.subjectId, courseId, group.ranking[courseIndex - 1]);
       persistPlan(state);
       render(state);
     });
@@ -688,7 +708,7 @@ function renderGroup(state, subject, group, coursesBySubject, groupIndex) {
     down.setAttribute("data-npu-focus-key", `subject-${subject.subjectId}-group-${groupIndex}-${courseIndex}-down`);
     down.disabled = state.running || courseIndex === group.ranking.length - 1;
     down.addEventListener("click", () => {
-      group.ranking = moveDown(group.ranking, courseIndex);
+      state.plan = swapCourses(state.plan, subject.subjectId, courseId, group.ranking[courseIndex + 1]);
       persistPlan(state);
       render(state);
     });
@@ -700,12 +720,6 @@ function renderGroup(state, subject, group, coursesBySubject, groupIndex) {
   return wrapper;
 }
 
-// Puts a "Rajtolóhoz" switch on every course row, next to the native "Tervezőhöz
-// adás" one: the user picks a lab while looking at its timetable slot, not from a
-// dropdown elsewhere. Rows are found by their course code, never by the native
-// switch's own label, which is controlled by the page.
-// Records a subject from a GetSubjectsCourses request URL. That URL carries exactly
-
 // Null when the planner is closed, so a user who closes it mid-run stops seeing
 // updates rather than breaking the run.
 function dialogQuery(state, selector) {
@@ -714,6 +728,7 @@ function dialogQuery(state, selector) {
 
 module.exports = {
   buildLauncher,
+  persistPlan,
   openPlanner,
   render,
   loadPeriods,

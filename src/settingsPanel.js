@@ -10,6 +10,7 @@ const modal = require("./modal");
 const settings = require("./settings");
 const theme = require("./theme");
 const tokens = require("./neptunTokens");
+const utils = require("./utils");
 
 let registry = [];
 let idSequence = 0;
@@ -79,6 +80,8 @@ const CSS = `
 .npu-s__title { display: block; font-weight: 600; font-size: 15px; line-height: 1.3; }
 .npu-s__row--option .npu-s__title { font-size: 14px; }
 .npu-s__desc { display: block; font-size: 13px; line-height: 1.4; opacity: .72; margin-top: 3px; }
+.npu-s__where { display: block; font-size: 12px; line-height: 1.4; opacity: .6; margin-top: 3px; }
+.npu-s__where b { font-weight: 700; }
 .npu-s__switch {
   position: relative; flex: 0 0 auto; width: 40px; height: 24px; margin-top: 1px; padding: 0;
   border: 0; border-radius: 12px; background: #c4c9d6; cursor: pointer; transition: background-color .2s ease;
@@ -123,25 +126,25 @@ function setRegistry(modules) {
   registry = modules.filter(module => module && module.meta && module.meta.id);
 }
 
-// Partition modules by their group. Modules without a group go to the default group.
-// Returns an array of { group, modules } where group is the normalized group name or
-// null for the default group.
+// The panel's sections, in this order; they mirror the README's feature tables. A
+// module names its section by id in `meta.group`; one without a known id lands in
+// "Egyéb" at the end rather than disappearing.
+const GROUPS = [
+  { id: "registration", name: "Tárgyfelvétel" },
+  { id: "rajtolo", name: "Rajtoló" },
+  { id: "daily", name: "Mindennapok" },
+  { id: "comfort", name: "Megjelenés és kényelem" },
+];
+
+// Pure: modules -> [{ id, name, modules }], empty sections left out.
 function groupModules(modules) {
-  const grouped = new Map();
-  const DEFAULT_GROUP_ID = null;
-  const DEFAULT_GROUP_NAME = "Funkciók";
-
+  const sections = GROUPS.map(group => ({ id: group.id, name: group.name, modules: [] }));
+  const rest = { id: null, name: "Egyéb", modules: [] };
   modules.forEach(module => {
-    const groupId = (module.meta && module.meta.group && module.meta.group.id) || DEFAULT_GROUP_ID;
-    const groupName = (module.meta && module.meta.group && module.meta.group.name) || DEFAULT_GROUP_NAME;
-
-    if (!grouped.has(groupId)) {
-      grouped.set(groupId, { id: groupId, name: groupName, modules: [] });
-    }
-    grouped.get(groupId).modules.push(module);
+    const id = module.meta && module.meta.group;
+    (sections.find(section => section.id === id) || rest).modules.push(module);
   });
-
-  return Array.from(grouped.values());
+  return sections.concat(rest).filter(section => section.modules.length > 0);
 }
 
 // A button with role="switch": keyboard, focus and screen-reader state for free.
@@ -164,7 +167,7 @@ function isOn(input) {
 }
 
 // One switch row. The whole row is the click target; the switch carries the state.
-function switchRow(doc, { name, description, checked, disabled, option }, onToggle) {
+function switchRow(doc, { name, description, where, checked, disabled, option }, onToggle) {
   const item = el(doc, "div", option ? "npu-s__row npu-s__row--option" : "npu-s__row");
   const text = el(doc, "span", "npu-s__text");
   const title = el(doc, "span", "npu-s__title", name);
@@ -177,6 +180,16 @@ function switchRow(doc, { name, description, checked, disabled, option }, onTogg
     desc.id = `npu-s-desc-${++idSequence}`;
     input.setAttribute("aria-describedby", desc.id);
     text.appendChild(desc);
+  }
+  // Where on Neptun's pages the feature shows up, so a switched-on one can be found.
+  if (where) {
+    const place = el(doc, "span", "npu-s__where");
+    place.appendChild(el(doc, "b", null, "Hol: "));
+    place.appendChild(doc.createTextNode(where));
+    place.id = `npu-s-where-${++idSequence}`;
+    const described = input.getAttribute("aria-describedby");
+    input.setAttribute("aria-describedby", described ? `${described} ${place.id}` : place.id);
+    text.appendChild(place);
   }
   item.appendChild(text);
   item.appendChild(input);
@@ -206,6 +219,7 @@ function moduleRows(doc, module, flags, editable, onChange) {
     {
       name: meta.required ? `${meta.name} (mindig bekapcsolva)` : meta.name,
       description: meta.description,
+      where: meta.where,
       checked: settings.isEnabled(module, flags),
       disabled: Boolean(meta.required) || !editable,
     },
@@ -224,6 +238,7 @@ function moduleRows(doc, module, flags, editable, onChange) {
       {
         name: option.name,
         description: option.description,
+        where: option.where,
         checked: settings.isOptionEnabled(module, option, flags),
         disabled: !isOn(main.input) || !editable,
         option: true,
@@ -368,7 +383,6 @@ async function open() {
   const pending = Object.assign({}, flags);
   const canPersist = settings.canPersist();
   const savedColour = settings.themeColor(flags);
-  let dirty = false;
   let saving = false;
   let dialog = null;
   let saveError = null;
@@ -384,9 +398,36 @@ async function open() {
     }
     warningHost.textContent = "";
     settings.brokenDependencies(registry, pending).forEach(broken => {
-      warningHost.appendChild(alert(document, `${broken.name}: hiányozni fog ${broken.to} szükséges adat.`));
+      warningHost.appendChild(
+        alert(warningHost.ownerDocument, `${broken.name}: hiányozni fog ${broken.to} szükséges adat.`)
+      );
     });
     warningHost.hidden = warningHost.childElementCount === 0;
+  }
+
+  // Only a flipped switch needs the reload; the colour is already on screen. Saving
+  // used to reload the page even for a colour, or with nothing changed at all, and
+  // throw away whatever the user had open in Neptun.
+  function reloadNeeded() {
+    return settings.needsReload(flags, pending, registry);
+  }
+
+  function colourChanged() {
+    return settings.themeColor(pending) !== savedColour;
+  }
+
+  function saveLabel() {
+    if (!canPersist) {
+      return "Újratöltés";
+    }
+    return reloadNeeded() ? "Mentés és újratöltés" : "Mentés";
+  }
+
+  function repaintSaveLabel() {
+    const saveButton = dialog && dialog.buttons[1];
+    if (saveButton) {
+      utils.setButtonLabel(saveButton, saveLabel());
+    }
   }
 
   dialog = modal.open({
@@ -417,13 +458,13 @@ async function open() {
 
       root.appendChild(
         themeSection(doc, savedColour || theme.NEPTUN_PRIMARY, colour => {
-          dirty = true;
           if (colour === theme.NEPTUN_PRIMARY) {
             delete pending[settings.THEME_COLOR_KEY];
           } else {
             pending[settings.THEME_COLOR_KEY] = colour;
           }
           theme.apply(colour);
+          repaintSaveLabel();
         })
       );
 
@@ -438,9 +479,9 @@ async function open() {
             group.modules.forEach(module => {
               card.appendChild(
                 moduleRows(doc, module, flags, canPersist, (id, on) => {
-                  dirty = true;
                   pending[id] = on;
                   repaintWarnings();
+                  repaintSaveLabel();
                 })
               );
             });
@@ -456,12 +497,17 @@ async function open() {
     actions: [
       { label: "Mégse" },
       {
-        label: canPersist ? "Mentés és újratöltés" : "Újratöltés",
+        label: saveLabel(),
         primary: true,
         onClick() {
-          if (!dirty || !canPersist) {
+          if (!canPersist) {
             location.reload();
             return false;
+          }
+          const reload = reloadNeeded();
+          if (!reload && !colourChanged()) {
+            // Nothing to save: just close.
+            return true;
           }
 
           const saveButton = dialog && dialog.buttons[1];
@@ -472,7 +518,12 @@ async function open() {
           saving = true;
           settings.writeFlags(settings.pruneFlags(pending, registry)).then(saved => {
             if (saved) {
-              location.reload();
+              if (reload) {
+                location.reload();
+              } else if (dialog) {
+                // `saving` stays set, so onClose keeps the new colour on screen.
+                dialog.close();
+              }
               return;
             }
             saving = false;
@@ -509,4 +560,4 @@ function registerMenuCommand() {
   }
 }
 
-module.exports = { setRegistry, open, registerMenuCommand };
+module.exports = { setRegistry, open, registerMenuCommand, groupModules, GROUPS };

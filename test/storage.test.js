@@ -476,7 +476,9 @@ async function runToggleStatePersistenceCheck() {
     assert.strictEqual(occupancy.isEnabled(), false, "before the load lands there is genuinely nothing to know yet");
     await ready;
     assert.strictEqual(occupancy.isEnabled(), true, "the saved toggle state is picked up once storage loads");
-    await storage.set("occupancyEnabled", false);
+    // GM.setValue resolves undefined, as Tampermonkey's does. A successful write must
+    // still read as success, or the Rajtoló reports "nem menthető" on every toggle.
+    assert.strictEqual(await storage.set("occupancyEnabled", false), true, "a landed write reports true");
     assert.strictEqual(occupancy.isEnabled(), false, "and it keeps tracking storage rather than a stale copy");
   } finally {
     if (typeof previousGM === "undefined") {

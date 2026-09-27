@@ -19,7 +19,9 @@ const PROJECT_URL = "https://github.com/varannaibence/npu-uj-neptunhoz";
 // Shown in the settings panel; `id` is also the key the switch is stored under.
 const meta = {
   id: "footerBranding",
+  group: "comfort",
   name: "Lábléc és beállítások",
+  where: "Minden oldal alján, a láblécben",
   description: "Az NPU neve, a hibabejelentő és a beállítások a lap alján. Ezen keresztül éred el ezt a panelt.",
   required: true,
 };

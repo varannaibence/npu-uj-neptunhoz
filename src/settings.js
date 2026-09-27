@@ -222,6 +222,17 @@ function pruneFlags(flags, modules) {
   return next;
 }
 
+// Whether saving `next` over `previous` flips a module or option switch. The theme
+// colour is only CSS and already applied live, so a colour-only change (or a switch
+// flipped and flipped back) needs no page reload.
+function needsReload(previous, next, modules) {
+  const before = pruneFlags(previous, modules);
+  const after = pruneFlags(next, modules);
+  return Array.from(new Set(Object.keys(before).concat(Object.keys(after)))).some(
+    key => key !== THEME_COLOR_KEY && before[key] !== after[key]
+  );
+}
+
 // Which enabled modules would lose something if `flags` were applied. A module
 // declares what it `provides` and what it `needs`; nothing is inferred here, so a
 // dependency only surfaces once someone writes it down.
@@ -255,6 +266,7 @@ module.exports = {
   isEnabled,
   isOptionEnabled,
   pruneFlags,
+  needsReload,
   THEME_COLOR_KEY,
   themeColor,
 };

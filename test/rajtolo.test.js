@@ -68,6 +68,72 @@ assert.strictEqual(
 assert.strictEqual(rajtolo.formatCountdown(0), "indul…");
 assert.strictEqual(rajtolo.formatCountdown(-5000), "indul…", "already past T-0 counts as starting");
 assert.strictEqual(rajtolo.formatCountdown(65000), "1p 5mp");
+assert.strictEqual(rajtolo.formatCountdown(3600000), "1ó 0p 0mp");
+assert.strictEqual(
+  rajtolo.formatCountdown((26 * 3600 + 5) * 1000),
+  "1 nap 2ó 0p 5mp",
+  "a day is not shown as 26 hours"
+);
+
+// The armed Rajtoló keeps its session by making the page renew the token. Pressing
+// search renews only an EXPIRED token (measured), so right before the start it waits
+// for expiry; the keep-alive asks once the token is old enough to be long expired.
+{
+  const { sessionChore, tokenExpired } = require("../src/modules/rajtolo/protocol");
+  const now = 10 * 60 * 60 * 1000;
+  const fresh = { issuedAtMs: now - 60000, expiresAtMs: now + 240000 };
+  const expired = { issuedAtMs: now - 360000, expiresAtMs: now - 60000 };
+  assert.strictEqual(sessionChore(now, 30000, fresh, null), false, "a live token cannot be renewed yet");
+  assert.strictEqual(sessionChore(now, 30000, expired, null), true, "an expired token just before the start");
+  assert.strictEqual(sessionChore(now, 5 * 60000, expired, null), false, "not yet: far from the start");
+  assert.strictEqual(
+    sessionChore(now, 60 * 60000, { issuedAtMs: now - 11 * 60000, expiresAtMs: now - 6 * 60000 }, null),
+    true,
+    "keep-alive while armed, before the 15-minute session runs out"
+  );
+  assert.strictEqual(sessionChore(now, 30000, expired, now - 20000), false, "a failed ask is not repeated at once");
+  assert.strictEqual(sessionChore(now, 30000, { issuedAtMs: null, expiresAtMs: null }, null), true, "unknown");
+  assert.strictEqual(tokenExpired(expired, now), true);
+  assert.strictEqual(tokenExpired(fresh, now), false);
+  assert.strictEqual(tokenExpired({ issuedAtMs: null, expiresAtMs: null }, now), false, "unknown: just send it");
+}
+
+assert.strictEqual(rajtolo.runTitle(65000, false, "Neptun Web"), "1p 5mp – Neptun Web", "countdown in the tab");
+assert.strictEqual(rajtolo.runTitle(0, false, "Neptun Web"), "Rajtoló fut… – Neptun Web");
+assert.strictEqual(rajtolo.runTitle(0, true, "Neptun Web"), "✔ Rajtoló kész – Neptun Web");
+
+// Neptun's times are Hungarian wall-clock time whatever zone the browser is in, so a
+// student registering from abroad still starts at the Hungarian opening.
+assert.strictEqual(rajtolo.wallClockToEpoch("2026-02-02T10:00"), Date.UTC(2026, 1, 2, 9, 0), "winter: UTC+1");
+assert.strictEqual(rajtolo.wallClockToEpoch("2026-07-15T10:00:30"), Date.UTC(2026, 6, 15, 8, 0, 30), "summer: UTC+2");
+assert.strictEqual(
+  rajtolo.wallClockToEpoch("2026-10-25T01:30"),
+  Date.UTC(2026, 9, 24, 23, 30),
+  "just before the autumn switch still reads as summer time"
+);
+assert.ok(Number.isNaN(rajtolo.wallClockToEpoch("")), "an empty field is no time at all");
+assert.ok(Number.isNaN(rajtolo.wallClockToEpoch(null)));
+assert.ok(Number.isNaN(rajtolo.wallClockToEpoch("holnap reggel")));
+
+// The period picker opens on the current or next period, not on whichever is first.
+{
+  const periods = [
+    { periodId: "old", fromDate: "2026-01-20T08:00", toDate: "2026-01-30T23:59" },
+    { periodId: "next", fromDate: "2026-09-10T08:00", toDate: "2026-09-20T23:59" },
+    { periodId: "later", fromDate: "2026-09-25T08:00", toDate: "2026-10-05T23:59" },
+  ];
+  const at = text => rajtolo.wallClockToEpoch(text);
+  assert.strictEqual(rajtolo.defaultPeriod(periods, at("2026-09-01T12:00")).periodId, "next");
+  assert.strictEqual(rajtolo.defaultPeriod(periods, at("2026-09-15T12:00")).periodId, "next", "an open one counts");
+  assert.strictEqual(rajtolo.defaultPeriod(periods, at("2026-09-22T12:00")).periodId, "later");
+  assert.strictEqual(rajtolo.defaultPeriod(periods, at("2027-01-01T12:00")).periodId, "later", "all over -> latest");
+  assert.strictEqual(
+    rajtolo.defaultPeriod(periods.slice().reverse(), at("2026-09-01T12:00")).periodId,
+    "next",
+    "the server's order does not decide"
+  );
+  assert.strictEqual(rajtolo.defaultPeriod([], Date.now()), null);
+}
 
 // the response classifier: submitted / requirement / unknown
 assert.strictEqual(rajtolo.classifyResponse({ data: {}, notification: [] }).kind, "submitted");
@@ -136,6 +202,16 @@ assert.strictEqual(
 assert.strictEqual(rajtolo.toastTone("submitted"), "warn");
 assert.strictEqual(rajtolo.toastTone("full"), "error");
 assert.strictEqual(rajtolo.statusLabel("submitted"), "Beküldve — ellenőrizd a Neptunban");
+assert.strictEqual(rajtolo.toastTone("registered"), "ok", "only a confirmed registration is green");
+assert.strictEqual(rajtolo.toastTone("waitlisted"), "warn");
+assert.strictEqual(
+  rajtolo.summarize([{ kind: "registered" }, { kind: "waitlisted" }, { kind: "submitted" }, { kind: "exhausted" }]),
+  "Kész: 3/4 tárgy beküldve, ebből 1 felvéve, 1 várólistán; ellenőrizd a Neptunban."
+);
+assert.strictEqual(
+  rajtolo.summarize([{ kind: "submitted" }, { kind: "unknown" }]),
+  "Leállt ismeretlen hiba miatt (1/2 tárgy beküldve; ellenőrizd a Neptunban)."
+);
 
 // the next-combination chooser: highest-ranked non-full, non-excluded course per
 // group; null means exhausted, not "submit an empty courseIds"
@@ -404,6 +480,81 @@ async function runEngineChecks() {
     assert.strictEqual(outcome.kind, "submitted", "the forecast is not presented as a confirmed placement");
   }
 
+  // After an answered submission the same course list is read once more, and only the
+  // student's own status fields turn "beküldve" into "felvéve" or "várólistán".
+  {
+    const verifyingDeps = (after, options = {}) => {
+      const calls = [];
+      let posted = false;
+      const controller = fakeController();
+      return {
+        calls,
+        controller,
+        get: subj => {
+          calls.push(posted ? "verify" : "get");
+          if (posted && options.failVerify) {
+            return Promise.resolve({ notification: [{ description: "Hálózati hiba.", type: 3 }] });
+          }
+          const rows = [
+            { id: "c1", subjectId: subj.subjectId, isFull: false },
+            { id: "c2", subjectId: subj.subjectId, isFull: false },
+          ];
+          return Promise.resolve({ data: posted ? after(rows) : rows, notification: [] });
+        },
+        post: () => {
+          posted = true;
+          if (options.stopOnPost) {
+            controller.stopped = true;
+          }
+          return Promise.resolve({ data: {}, notification: [] });
+        },
+        delay: noDelay,
+        onEvent: () => {},
+      };
+    };
+    const twoGroups = subject("s1", [
+      { type: "Elmélet", ranking: ["c1"] },
+      { type: "Labor", ranking: ["c2"] },
+    ]);
+    const signed = rows => rows.map(row => Object.assign({}, row, { isSigned: true }));
+
+    const confirmed = verifyingDeps(signed);
+    assert.strictEqual((await rajtolo.runSubject(twoGroups, confirmed)).kind, "registered");
+    assert.deepStrictEqual(confirmed.calls, ["get", "verify"], "exactly one extra read, after the POST");
+
+    const queued = verifyingDeps(rows => [
+      Object.assign({}, rows[0], { isSigned: true }),
+      Object.assign({}, rows[1], { isOnWaitingList: true }),
+    ]);
+    assert.strictEqual(
+      (await rajtolo.runSubject(twoGroups, queued)).kind,
+      "waitlisted",
+      "one queued course means the subject is not secured"
+    );
+
+    const half = verifyingDeps(rows => [Object.assign({}, rows[0], { isSigned: true }), rows[1]]);
+    assert.strictEqual((await rajtolo.runSubject(twoGroups, half)).kind, "submitted", "half signed is not felvéve");
+
+    const unread = verifyingDeps(signed, { failVerify: true });
+    assert.strictEqual(
+      (await rajtolo.runSubject(twoGroups, unread)).kind,
+      "submitted",
+      "a failed check is not an unknown error: the run must not halt over it"
+    );
+
+    const stopped = verifyingDeps(signed, { stopOnPost: true });
+    assert.strictEqual((await rajtolo.runSubject(twoGroups, stopped)).kind, "submitted");
+    assert.deepStrictEqual(stopped.calls, ["get"], "Stop means no further request, the check included");
+
+    assert.strictEqual(rajtolo.submissionOutcome(new Map(), ["c1"]), null, "a course missing from the list");
+    assert.strictEqual(rajtolo.submissionOutcome(new Map([["c1", { isSigned: true }]]), []), null);
+    assert.strictEqual(
+      rajtolo.submissionOutcome(new Map([["c1", { isSigned: false, willBeOnWaitingList: true }]]), ["c1"]),
+      null,
+      "a forecast is never read as the student's own status"
+    );
+  }
+
   // a subject with nothing ranked is never posted to at all (fail closed by design)
   {
     let posted = false;
@@ -561,6 +712,37 @@ async function runEngineChecks() {
     assert.deepStrictEqual(attempted, [], "pre-stopped controller must not run anything");
     assert.strictEqual(outcomes[0].kind, "stopped");
   }
+
+  // The planner loads every planned subject's courses, one after the other. The pause
+  // between two loads used to replace the load itself, so only the first subject ever
+  // got its course labels and its conflict check.
+  {
+    const ui = require("../src/modules/rajtolo/ui");
+    const fetched = [];
+    const state = {
+      dialog: null,
+      plan: {
+        termId: "t1",
+        subjects: ["s1", "s2", "s3"].map(id => subject(id, [{ type: "Labor", ranking: [`${id}-c`] }])),
+      },
+      courseCatalog: new Map(),
+      courseLoads: new Set(),
+      courseLoadErrors: new Set(),
+      courseLoadQueue: null,
+      courseCatalogGeneration: 0,
+    };
+    await ui.loadPlannedCourses(state, false, entry => {
+      fetched.push(entry.subjectId);
+      return Promise.resolve({
+        data: [{ id: `${entry.subjectId}-c`, subjectId: entry.subjectId, isFull: false }],
+        notification: [],
+      });
+    });
+    assert.deepStrictEqual(fetched, ["s1", "s2", "s3"], "every planned subject is fetched, in plan order");
+    assert.ok(state.courseCatalog.get("s3").has("s3-c"), "the last subject's courses arrive too");
+    assert.strictEqual(state.courseLoadErrors.size, 0);
+    assert.strictEqual(state.courseLoadQueue, null, "the queue is released when it finishes");
+  }
 }
 
 // The countdown keeps only its currently pending timer. Retaining every elapsed
@@ -582,6 +764,40 @@ async function runEngineChecks() {
   }
 }
 
+// The start must be one timer armed from the click. Chrome runs a CHAINED timer in a
+// tab hidden for 5+ minutes only once a minute, so a countdown chain could start the
+// run up to a minute late. And Stop before the start has to report back: it clears
+// the timers, so nothing else ever would.
+{
+  const engine = require("../src/modules/rajtolo/engine");
+  assert.strictEqual(engine.startTimeout(-5), 0);
+  assert.strictEqual(engine.startTimeout(3e9), 2147483647, "setTimeout cannot hold longer; it re-arms instead");
+  const originalSetTimeout = global.setTimeout;
+  const originalClearTimeout = global.clearTimeout;
+  const timers = [];
+  global.setTimeout = (fn, ms) => timers.push({ fn, ms });
+  global.clearTimeout = () => {};
+  try {
+    const controller = rajtolo.createController();
+    let done = null;
+    const target = Date.now() + (interceptor.getServerOffsetMs() || 0) + 600000;
+    engine.scheduleRun(target, { subjects: [], delaySeconds: 1 }, controller, {
+      onTick() {},
+      onEvent() {},
+      onDone: outcomes => {
+        done = outcomes;
+      },
+    });
+    assert.strictEqual(timers.length, 2, "one display tick and one start timer");
+    assert.ok(timers[1].ms > 590000, "the start timer sleeps the whole wait at once");
+    controller.stop();
+    assert.deepStrictEqual(done, [], "Stop before the start reports back at once");
+  } finally {
+    global.setTimeout = originalSetTimeout;
+    global.clearTimeout = originalClearTimeout;
+  }
+}
+
 // --- rajtolo: courses enter the pickPlan only when explicitly picked ---
 const aiSubject = { subjectId: "s1", termId: "t1", curriculumTemplateId: "c1", curriculumTemplateLineId: "l1" };
 const lab1 = { id: "c-lab-1", code: "X-L1", type: "Labor" };
@@ -598,6 +814,30 @@ assert.ok(rajtolo.isCourseInPlan(pickPlan, "s1", lab1.id));
 // a second course of the same group is ranked after the first
 pickPlan = rajtolo.toggleCourseInPlan(pickPlan, aiSubject, lab2);
 assert.deepStrictEqual(pickPlan.subjects[0].groups.find(g => g.type === "Labor").ranking, [lab1.id, lab2.id]);
+
+// The ▲/▼ buttons list a PRUNED copy of each ranking, so a swap has to go through the
+// plan by course id. Reordering the copy by index used to change nothing that was saved.
+{
+  const stale = Object.assign({}, pickPlan, {
+    subjects: [
+      Object.assign({}, pickPlan.subjects[0], {
+        groups: [{ type: "Labor", typeId: null, ranking: ["gone", lab1.id, lab2.id] }],
+      }),
+    ],
+  });
+  const visible = rajtolo.pruneGroups(stale.subjects[0].groups, [lab1, lab2])[0].ranking;
+  assert.deepStrictEqual(visible, [lab1.id, lab2.id], "the dialog shows the ranking without the stale id");
+  const swapped = rajtolo.swapCourses(stale, "s1", visible[1], visible[0]);
+  assert.deepStrictEqual(
+    swapped.subjects[0].groups[0].ranking,
+    ["gone", lab2.id, lab1.id],
+    "moving the second visible course up swaps it with its visible neighbour in the stored plan"
+  );
+  assert.deepStrictEqual(stale.subjects[0].groups[0].ranking, ["gone", lab1.id, lab2.id], "the input is untouched");
+  assert.strictEqual(rajtolo.swapCourses(stale, "s1", lab1.id, undefined), stale, "no neighbour -> no change");
+  assert.strictEqual(rajtolo.swapCourses(stale, "s1", lab1.id, lecture.id), stale, "another group -> no change");
+  assert.strictEqual(rajtolo.swapCourses(stale, "other", lab1.id, lab2.id), stale, "another subject -> no change");
+}
 
 // a different group stays separate (one course per group, not per subject)
 pickPlan = rajtolo.toggleCourseInPlan(pickPlan, aiSubject, lecture);
@@ -811,4 +1051,80 @@ module.exports = { run: runEngineChecks };
       global.location = previousLocation;
     }
   }
+}
+
+// withRenewal: a refused token is renewed and the request sent once more; nothing
+// else is ever resent.
+{
+  const { withRenewal } = require("../src/modules/rajtolo/engine");
+  const { STATUS_KEY } = require("../src/modules/rajtolo/constants");
+  const answers = (...list) => {
+    const calls = [];
+    const request = (...args) => {
+      calls.push(args);
+      return Promise.resolve(list.shift());
+    };
+    return { request, calls };
+  };
+  const session = (renewed, needs = false) => {
+    const log = { renewals: 0 };
+    return Object.assign(log, {
+      needsRenewal: () => needs,
+      renew: () => {
+        log.renewals++;
+        return Promise.resolve(renewed);
+      },
+    });
+  };
+  const check = async () => {
+    const refused = answers({ [STATUS_KEY]: 401 }, { [STATUS_KEY]: 200, data: [] });
+    const renewing = session(true);
+    const ok = await withRenewal(refused.request, renewing)("s", ["c"]);
+    assert.strictEqual(ok[STATUS_KEY], 200);
+    assert.strictEqual(refused.calls.length, 2, "a 401 is resent once after a renewal");
+    assert.deepStrictEqual(refused.calls[1], ["s", ["c"]]);
+
+    const stillRefused = answers({ [STATUS_KEY]: 401 }, { [STATUS_KEY]: 200 });
+    const out = await withRenewal(stillRefused.request, session(false))();
+    assert.strictEqual(out[STATUS_KEY], 401, "no new token, no resend");
+    assert.strictEqual(stillRefused.calls.length, 1);
+
+    const timedOut = answers({ notification: [{ description: "A szerver nem válaszolt időben.", type: 3 }] });
+    const quiet = session(true);
+    await withRenewal(timedOut.request, quiet)();
+    assert.strictEqual(timedOut.calls.length, 1, "a timeout may have been processed: never resent");
+    assert.strictEqual(quiet.renewals, 0);
+
+    // Stop pressed (or a user switch) while the renewal ran: nothing more is sent.
+    let running = true;
+    const stopping = answers({ [STATUS_KEY]: 401 }, { [STATUS_KEY]: 200 });
+    const stopSession = Object.assign(session(true), {
+      renew: () => {
+        running = false;
+        return Promise.resolve(true);
+      },
+      shouldContinue: () => running,
+    });
+    const halted = await withRenewal(stopping.request, stopSession)();
+    assert.strictEqual(stopping.calls.length, 1, "no resend after Stop");
+    assert.strictEqual(require("../src/modules/rajtolo/engine").isHalted(halted), true);
+    running = true;
+    const beforeSend = answers({ [STATUS_KEY]: 200 });
+    const stopFirst = Object.assign(session(true, true), {
+      renew: () => {
+        running = false;
+        return Promise.resolve(true);
+      },
+      shouldContinue: () => running,
+    });
+    await withRenewal(beforeSend.request, stopFirst)();
+    assert.strictEqual(beforeSend.calls.length, 0, "Stop during the pre-send renewal: never sent");
+
+    const expired = answers({ [STATUS_KEY]: 200 });
+    const before = session(true, true);
+    await withRenewal(expired.request, before)();
+    assert.strictEqual(before.renewals, 1, "an expired token is renewed before the request");
+  };
+  const previousRun = module.exports.run;
+  module.exports.run = () => previousRun().then(check);
 }

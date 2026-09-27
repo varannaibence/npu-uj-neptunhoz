@@ -21,7 +21,9 @@ function widen(url, endpoint) {
 // Shown in the settings panel; `id` is also the key the switch is stored under.
 const meta = {
   id: "pagination",
+  group: "registration",
   name: "Hosszabb listák",
+  where: "Tárgyak › Tárgyfelvétel: a tárgylista",
   description: "Egy lapon jóval több sort tölt be, így kevesebbet kell lapozni.",
 };
 

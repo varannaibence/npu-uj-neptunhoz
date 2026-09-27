@@ -6,7 +6,9 @@ const { render } = require("./ui");
 const utils = require("../../utils");
 const badge = require("../../badge");
 
-// waiting for the subject to turn up in a SchedulableSubjects page.
+// Records a subject from a GetSubjectsCourses request URL. That URL carries exactly
+// the four ids SubjectSignin needs, so the row switch works without waiting for the
+// subject to turn up in a SchedulableSubjects page.
 function rememberSubjectFromUrl(state, url) {
   if (!url) {
     return;
@@ -43,10 +45,6 @@ function rememberSubjectFromUrl(state, url) {
   });
 }
 
-// A toast in the same corner as the app's own push notifications, with the same
-// geometry. Appended to <body> rather than into their container, which is Angular's
-// and would wipe anything we put in it.
-
 const ROW_SELECTOR = "neptun-course-list-item";
 const SLIDER_SELECTOR = "neptun-switch-slider";
 const ROW_FLAG = "data-npu-rajtolo";
@@ -82,6 +80,10 @@ function findCustomCourseRow(code) {
   );
 }
 
+// Puts a "Rajtolóhoz" switch on every course row, next to the native "Tervezőhöz
+// adás" one: the user picks a lab while looking at its timetable slot, not from a
+// dropdown elsewhere. Rows are found by their course code, never by the native
+// switch's own label, which is controlled by the page.
 function decorateCourseRows(state) {
   const byCode = new Map();
   const ambiguous = new Set();
@@ -238,6 +240,7 @@ function buildRowToggle(wrapper) {
     }
   });
   clone.style.marginLeft = "16px";
+  utils.markNpu(clone, "Rajtolóhoz adás");
   return clone;
 }
 
@@ -274,18 +277,9 @@ function paintRowToggle(toggle, selected) {
   if (icon) {
     icon.style.display = selected ? "" : "none";
   }
-  toggle.setAttribute("title", selected ? "Rajtolóhoz adva" : "Rajtolóhoz adás");
+  toggle.setAttribute("title", `${selected ? "Rajtolóhoz adva" : "Rajtolóhoz adás"} – NPU-funkció`);
   return true;
 }
-
-// Two lifetimes, hence two functions.
-//
-// The state, its handlers and its observer must exist exactly ONCE per page load:
-// registering them twice gives two independent states, each repainting the row switch
-// from its own copy of the plan - the switch flickered dozens of times per click.
-//
-// The launcher BUTTON has the opposite lifetime: Angular owns the toolbar and throws
-// it away on every route change, so it must be re-insertable. Sharing one latch meant
 
 module.exports = {
   decorateCourseRows,

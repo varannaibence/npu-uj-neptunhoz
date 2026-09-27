@@ -219,4 +219,57 @@ async function run() {
   }
 }
 
+// A colour is only CSS and is already on screen, so saving just a colour (or a
+// switch flipped and flipped back) must not reload the page the user has open.
+{
+  const modules = [
+    { meta: { id: "alpha" } },
+    { meta: { id: "beta", defaultEnabled: false, options: [{ id: "opt" }] } },
+    { meta: { id: "footer", required: true } },
+  ];
+  const saved = { alpha: false };
+  assert.strictEqual(settings.needsReload(saved, { alpha: false }, modules), false, "nothing changed");
+  assert.strictEqual(
+    settings.needsReload(saved, { alpha: false, [settings.THEME_COLOR_KEY]: "#0f7a55" }, modules),
+    false,
+    "a colour-only change applies live"
+  );
+  assert.strictEqual(settings.needsReload(saved, { alpha: true }, modules), true, "a module switched back on");
+  assert.strictEqual(settings.needsReload(saved, { alpha: false, beta: true }, modules), true, "an opt-in switched on");
+  assert.strictEqual(settings.needsReload(saved, { alpha: false, "beta.opt": false }, modules), true, "an option");
+  assert.strictEqual(settings.needsReload(saved, { alpha: false, footer: false }, modules), false, "required: no-op");
+  assert.strictEqual(settings.needsReload({}, { alpha: true }, modules), false, "setting the default is not a change");
+}
+
 module.exports = { run };
+
+// --- the panel's sections: fixed order, every real module in a known one ---
+{
+  const fs = require("fs");
+  const path = require("path");
+  const { groupModules, GROUPS } = require("../src/settingsPanel");
+  const fake = (id, group) => ({ meta: { id, group } });
+  assert.deepStrictEqual(
+    groupModules([fake("a", "comfort"), fake("b", "registration"), fake("c", "nope"), fake("d", "registration")]).map(
+      section => [section.name, section.modules.map(m => m.meta.id)]
+    ),
+    [
+      ["Tárgyfelvétel", ["b", "d"]],
+      ["Megjelenés és kényelem", ["a"]],
+      ["Egyéb", ["c"]],
+    ],
+    "sections keep the README's order, not the registry's; an unknown group is still shown"
+  );
+  const known = new Set(GROUPS.map(group => group.id));
+  const indexSource = fs.readFileSync(path.join(__dirname, "../src/index.js"), "utf8");
+  const modulePaths = Array.from(indexSource.matchAll(/require\("\.\/(modules\/[^"]+)"\)/g), m => m[1]);
+  assert.ok(modulePaths.length > 10, "the registry was read");
+  modulePaths.forEach(modulePath => {
+    const { meta } = require(path.join(__dirname, "../src", modulePath));
+    assert.ok(known.has(meta.group), `${meta.id} belongs to a panel section`);
+    // The panel tells where each feature shows up; a new one must say it too.
+    [meta].concat(meta.options || []).forEach(entry => {
+      assert.ok(typeof entry.where === "string" && entry.where.trim(), `${meta.id}.${entry.id} says where it is`);
+    });
+  });
+}

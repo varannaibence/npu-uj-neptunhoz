@@ -25,7 +25,7 @@ Nyisd meg a **Tárgyfelvétel** oldalt, és nézd meg ezt a négyet:
 
 1. Ha bekapcsoltad az automatikus betöltést, magától elindul-e a tárgyak
    listázása.
-2. Ott van-e a **Rajtoló (NPU)** és a **Betelt kurzusok hátra** gomb a szűrő mellett.
+2. Ott van-e a **Rajtoló** (NPU-ikonnal) és a **Betelt kurzusok hátra** gomb a szűrő mellett.
 3. Egy tárgyat lenyitva látszik-e a kurzusok férőhelye (pl. `regisztrált / limit`).
 4. A lap alján ott van-e a `Neptun PowerUp!` felirat.
 

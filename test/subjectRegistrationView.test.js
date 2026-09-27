@@ -140,7 +140,7 @@ assert.strictEqual(
 // 4) no clash, complete baseline: the only path that may say "ok"
 const okVerdict = view.conflictVerdict(candidate, [clearEntry], true);
 assert.strictEqual(okVerdict.state, "ok");
-assert.strictEqual(okVerdict.label, "✓");
+assert.strictEqual(okVerdict.label, "Nincs ütközés");
 
 // a course never conflicts with an entry that IS itself
 const selfEntry = { course: { id: "cand", slots: [slot(1, 600, 720)] }, subject: {} };
@@ -349,3 +349,45 @@ const modelNoCourse = view.buildRowModel(undefined, [], true);
 assert.strictEqual(modelNoCourse.code, "", "a missing course must not throw, and yields empty/unknown fields");
 assert.strictEqual(modelNoCourse.verdict.state, "no-schedule");
 assert.strictEqual(modelNoCourse.freeSeat, null);
+
+// --- applyFiltersAndSort: a settled table is left alone ----------------------------
+// With a filter hiding a row that sits before the visible ones, every repaint used to
+// re-append the visible rows. That moved the real (Angular) controls inside them on
+// each observer tick, and the keyboard focus with them.
+{
+  let moves = 0;
+  const tbody = {
+    children: [],
+    get lastElementChild() {
+      return this.children[this.children.length - 1] || null;
+    },
+    appendChild(node) {
+      const index = this.children.indexOf(node);
+      if (index !== -1) {
+        this.children.splice(index, 1);
+      }
+      this.children.push(node);
+      moves++;
+      return node;
+    },
+    ownerDocument: {
+      createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }),
+    },
+  };
+  const entry = (id, freeSeat) => {
+    const tr = { id, style: { display: "" } };
+    tbody.appendChild(tr);
+    return { course: { id, code: id, slots: [] }, tr, extraRows: [], verdict: { state: "ok" }, freeSeat };
+  };
+  const section = { tbody, rows: new Map(), emptyRow: null, emptyText: "" };
+  ["A", "B", "C"].forEach((id, i) => section.rows.set(id, entry(id, i > 0)));
+  const state = { filters: { conflictFree: false, freeSeat: true }, sort: "code" };
+
+  view.applyFiltersAndSort(section, state);
+  assert.strictEqual(section.rows.get("A").tr.style.display, "none", "the full course is filtered out");
+  moves = 0;
+  view.applyFiltersAndSort(section, state);
+  view.applyFiltersAndSort(section, state);
+  assert.strictEqual(moves, 0, "an unchanged, filtered table is not touched again");
+  assert.strictEqual(tbody.lastElementChild, section.emptyRow, "the empty-state row stays last");
+}

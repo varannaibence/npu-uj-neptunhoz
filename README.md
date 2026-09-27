@@ -35,43 +35,63 @@ működik.
 
 ## Funkciók
 
-Minden funkció egyenként kapcsolható a **Neptun PowerUp! beállítások**
-panelben; a módosítás a következő oldalbetöltéskor lép életbe.
+Minden funkció (a lábléc kivételével, mert azon át nyílik a panel) egyenként
+kapcsolható a **Neptun PowerUp! beállítások**
+panelben (a lap alján, **NPU beállítások**); a módosítás a következő
+oldalbetöltéskor lép életbe. A panel minden funkciónál kiírja, hol találod a
+Neptunban; ugyanez áll az alábbi táblázatok **Hol található** oszlopában.
+
+Az NPU által az oldalra tett gombokon és kapcsolókon az NPU kék ikonja látszik,
+fölé húzva pedig az „NPU-funkció” felirat. Ami nem ilyen, az a Neptun saját része.
 
 A **Ki** alapállapot szándékos döntés, nem félkész funkciót jelez. Ezek a
 modulok a Neptun megszokott elrendezését vagy munkafolyamatát változtatják meg,
-illetve extra hálózati kérést indítanak, ezért csak kifejezett bekapcsolás után
-lépnek működésbe.
+vagy a háttérben maguktól indítanak kérést, ezért csak kifejezett bekapcsolás
+után lépnek működésbe. Saját kérést néhány alapból bekapcsolt funkció is küld
+(például a „Mi van ma?” a kezdőlapon, az Átlagkalkulátor és a Javaslatok
+megnyitáskor); hogy pontosan mit, azt a [fejlesztői
+leírás](docs/DEVELOPMENT.md) sorolja fel.
 
 ### Tárgyfelvétel
 
-| Funkció | Leírás | Alapállapot |
-| --- | --- | :---: |
-| Férőhely és várólista | Kurzusonként jelzi a szabad helyet, a beteltséget és a várólistát; tárgyanként a betelt kurzusok számát. | Be |
-| Órarendi ütközések | Megnevezi az ütköző tárgyat és időpontot a tervezőben lévő és a már felvett kurzusok alapján. | Be |
-| ↳ Időpont a megjegyzésből | Ha a Neptun nem ad órarendi adatot, a kurzus megjegyzéséből olvassa ki a napot, az időt és a termet (pl. „Hétfő 14-15, A1/216”), és az ütközésvizsgálatban is felhasználja. | Be |
-| Gyorsabb kurzuslista | Egy oldalon lényegesen több sort tölt be, így kevesebbet kell lapozni. | Be |
-| Betelt kurzusok hátra | A még felvehető kurzusokat előre rendezi a lenyitott listában. | Gombbal |
-| Tárgylista automatikus betöltése | Külön keresés nélkül elindítja a tárgyak listázását. | Ki |
-| Táblázatos kurzuslista | Szűrhető, rendezhető táblázatra cseréli a natív kurzuslistát. | Ki |
-| Kompakt nézet | Sűrűbb elrendezés nagy asztali kijelzőkhöz. | Ki |
+| Funkció | Leírás | Hol található | Alapállapot |
+| --- | --- | --- | :---: |
+| Férőhely és várólista | Kurzusonként jelzi a szabad helyet, a beteltséget és a várólistát; tárgyanként a betelt kurzusok számát. | Tárgyak › Tárgyfelvétel: a lenyitott tárgy kurzusai | Be |
+| Órarendi ütközések | Megnevezi az ütköző tárgyat és időpontot a tervezőben lévő és a már felvett kurzusok alapján. | Tárgyak › Tárgyfelvétel: a lenyitott tárgy kurzusai | Be |
+| ↳ Időpont a megjegyzésből | Ha a Neptun nem ad órarendi adatot, a kurzus megjegyzéséből olvassa ki a napot, az időt és a termet (pl. „Hétfő 14-15, A1/216”), és az ütközésvizsgálatban is felhasználja. | Tárgyak › Tárgyfelvétel: a lenyitott tárgy kurzusai | Be |
+| Gyorsabb kurzuslista | Egy oldalon lényegesen több sort tölt be, így kevesebbet kell lapozni. | Tárgyak › Tárgyfelvétel: a tárgylista | Be |
+| Betelt kurzusok hátra | A még felvehető kurzusokat előre rendezi a lenyitott listában. | Tárgyak › Tárgyfelvétel: gomb a szűrők mellett | Gombbal |
+| Tárgylista automatikus betöltése | Külön keresés nélkül elindítja a tárgyak listázását. | Tárgyak › Tárgyfelvétel: az oldal megnyitásakor | Ki |
+| Táblázatos kurzuslista | Szűrhető, rendezhető táblázatra cseréli a natív kurzuslistát: állapot a kód mellett, nap-chip és terem, telítettségi sáv, az ütköző tárgy neve, színkódolt sorok. | Tárgyak › Tárgyfelvétel: a lenyitott tárgy | Ki |
+| Kompakt nézet | Sűrűbb elrendezés nagy asztali kijelzőkhöz. | Tárgyak › Tárgyfelvétel, nagy kijelzőn | Ki |
 
 ### Rajtoló
 
-| Funkció | Leírás | Alapállapot |
-| --- | --- | :---: |
-| Sorba rendezett tárgyfelvétel | Mentett tárgy- és kurzussorrend, a megadott időpontban soros beküldéssel. [Részletek](#a-rajtoló) | Külön indítható |
+| Funkció | Leírás | Hol található | Alapállapot |
+| --- | --- | --- | :---: |
+| Sorba rendezett tárgyfelvétel | Mentett tárgy- és kurzussorrend, a megadott időpontban soros beküldéssel. [Részletek](#a-rajtoló) | Tárgyak › Tárgyfelvétel: **Rajtoló** gomb a szűrők mellett, **Rajtolóhoz** kapcsoló a kurzusoknál | Külön indítható |
+| ↳ Órarendjavaslatok | **Javaslatok** gomb a Neptun Órarendtervezőjében: a felvett órák mellé ütközésmentes kurzusválasztást keres (kevesebb lyukas óra, több szabad nap vagy legkevesebb csere), a heti rácson előnézetben mutatja; megerősítés után a Neptun Tervezőjében is a javasolt kurzusokra cseréli a tervezetteket, és átrendezi a Rajtoló sorrendjét. | Tárgyak › Tárgyfelvétel: a lap alján nyíló Órarendtervező fejléce | Be |
+
+### Mindennapok
+
+| Funkció | Leírás | Hol található | Alapállapot |
+| --- | --- | --- | :---: |
+| Mi van ma? | A kezdőlap tetején, a Neptun kártyáival egyező három kártyán a mai órák teremmel, a befizetési határidők és a futó vagy közelgő tárgyfelvételi időszakok. Ha egy határidő vagy időszak 3 napon belül esedékes, naponta egyszer értesít. | Kezdőlap, a tetején | Be |
+| ↳ Befizetendő tételek | Kártya a befizetendő tételekkel, összeggel és határidővel. | Kezdőlap | Be |
+| ↳ Időszakok | Kártya a futó és 45 napon belül nyíló tárgy- és vizsgajelentkezési időszakokkal. | Kezdőlap | Be |
+| ↳ Napi értesítés | Bejelentkezés után naponta egyszer jelez, ha egy befizetés vagy időszak 3 napon belül esedékes, vagy egy befizetés lejárt. | Bejelentkezés után, felugró értesítés | Be |
+| Átlagkalkulátor | A Felvett tárgyak oldalon a várt jegyekből kiszámolja a félév súlyozott átlagát, kreditindexét és korrigált kreditindexét. Csak akkor mutat eredményt, ha egy lezárt félév újraszámolása egyezik a Neptun saját értékeivel. | Tárgyak › Felvett tárgyak: gomb a szűrő mellett | Be |
 
 ### Megjelenés és kényelem
 
-| Funkció | Leírás | Alapállapot |
-| --- | --- | :---: |
-| Színtéma | A Neptun kékje helyett választható kiemelőszín (8 minta vagy egyéni); a fejléc és a lábléc ennek sötét árnyalatát kapja. | Neptun kék |
-| Kreditbontás | A fejlécben tárgytípusonként bontja a ténylegesen felvett krediteket. | Be |
-| Visszatérés az előző oldalra | Bejelentkezés után felajánlja a legutóbb használt oldal megnyitását. | Be |
-| Munkamenet életben tartása | Aktív használat mellett megújítja a hamarosan lejáró munkamenetet; tétlen lapot nem tart életben. | Ki |
-| Verzió és hibabejelentés | Az NPU neve és verziója a bejelentkező oldalon és a láblécben, hibabejelentő linkkel. | Be |
-| Frissítés jelzése | Amikor a Tampermonkey frissíti az NPU-t, a következő betöltéskor egyszer jelzi az új verziót, az újdonságok linkjével. | Be |
+| Funkció | Leírás | Hol található | Alapállapot |
+| --- | --- | --- | :---: |
+| Színtéma | A Neptun kékje helyett választható kiemelőszín (8 minta vagy egyéni); a fejléc és a lábléc ennek sötét árnyalatát kapja. | NPU beállítások (lábléc) | Neptun kék |
+| Kreditbontás | A fejlécben tárgytípusonként bontja a ténylegesen felvett krediteket. | Tárgyak › Tárgyfelvétel: a fejléc kreditkártyája | Be |
+| Visszatérés az előző oldalra | Bejelentkezés után felajánlja a legutóbb használt oldal megnyitását. | Bejelentkezés után, felugró értesítés | Be |
+| Munkamenet életben tartása | A tárgyfelvételi oldalon tétlen fülnél is megakadályozza a kiléptetést: mielőtt a munkamenet lejárna (12,5 perc tétlenség, vagy 10 perce nem frissült token után), megnyomja a Neptun saját keresőgombját. | Tárgyak › Tárgyfelvétel, a háttérben | Ki |
+| Verzió és hibabejelentés | Az NPU neve és verziója a bejelentkező oldalon és a láblécben, hibabejelentő linkkel. | Bejelentkező oldal és lábléc | Be |
+| Frissítés jelzése | Amikor a Tampermonkey frissíti az NPU-t, a következő betöltéskor egyszer jelzi az új verziót, az újdonságok linkjével. | Frissítés utáni első betöltéskor | Be |
 
 ## Telepítés
 
@@ -178,10 +198,40 @@ sorrendben küldi be a jelentkezéseket.
 3. Nyisd meg a Rajtolót a szűrő melletti gombbal: rendezd sorba a tárgyakat és
    kurzusokat, válaszd ki a nyitás időpontját a Neptun saját tárgyfelvételi
    időszakaiból, és nézd át az ütközéseket és a kredit-előrejelzést.
-4. Indítsd el, és kövesd az eredményeket.
+4. Indítsd el, és kövesd az eredményeket. Minden beküldés után a Rajtoló egyszer
+   újra lekéri a tárgy kurzuslistáját: ha a Neptun szerint minden beküldött
+   kurzusod felvett, **Felvéve**, ha valamelyiken várólistán vagy, **Várólistára
+   került** jelzést kapsz. Ha ez nem dönthető el, **Beküldve** marad, és a
+   Neptunban kell ellenőrizned.
+
+Az időpontok magyar idő szerint értendők akkor is, ha a gépedet más időzónára
+állítottad (például külföldi részképzésen).
+
+Elindítás után a Rajtoló életben tartja a munkamenetet, amíg az ablaka nyitva
+van. Ehhez nem küld saját frissítő kérést: kb. 10 percenként megnyomja a Neptun
+saját **Tárgy keresése** gombját, a Neptun pedig maga frissít. A nyitás előtti
+másfél percben ugyanígy friss tokent kér, hogy az első jelentkezés ne akadjon
+el. Ha a Neptun nem ad új munkamenetet, a visszaszámlálás mellett figyelmeztetés
+jelenik meg. A hátralévő idő a böngészőfül címében is látszik, a futás végén
+pedig a háttérben lévő fül címe **✔ Rajtoló kész** lesz.
 
 A terv felhasználónként és félévenként a böngésződben tárolódik. A Neptun
 **Tervezőhöz adás** kapcsolója ettől független funkció.
+
+Az Órarendtervező **Javaslatok** gombja a Rajtolóban és a Neptun Tervezőjében
+kiválasztott kurzuscsoportokhoz keres ütközésmentes kombinációt a már felvett
+órák mellé. Három változatot kínál: kevesebb lyukas óra, több szabad nap, vagy
+a lehető legkevesebb csere. A kiválasztott változat szaggatott keretes
+kártyákként jelenik meg a heti rácson; ha a terved már a legjobb, ezt mondja
+ki, és nem ajánl módosítást. Az **Alkalmazás** előbb felsorolja, mi változik:
+a Neptun Tervezőjében lévő kurzusokat a javasoltakra cseréli (a szerveren, a
+Neptun saját kéréseivel), a Rajtoló sorrendjét pedig átrendezi. Ha egy lépést
+a Neptun elutasít, az addigiakat visszagörgeti; a panelen visszavonható. A
+rács a frissült Tervezőt az oldal újratöltése után mutatja. Ha egy már felvett kurzus típusából (például laborból) egy másikat
+teszel a Tervezőbe, azt cserének veszi, és megmutatja, megéri-e cserélni; a
+cserét magát a Neptunban végezheted el. „Nincs ismert ütközés” azt jelenti, hogy
+az ismert időpontok között nincs átfedés: az időpont nélküli kurzusokra külön
+figyelmeztet.
 
 > **Fontos:** a Rajtoló **nem** jelentkezik be helyetted, nem kér kétlépcsős kódot, nem
 > kerüli meg a CAPTCHA-t és nem hágja át az egyetem szabályait. A
@@ -197,8 +247,11 @@ A terv felhasználónként és félévenként a böngésződben tárolódik. A N
 - **A döntést a Neptun hozza.** Éles tárgyfelvételi időszakban még ellenőrizendő
   a sikeres beküldés, a ténylegesen betelt (nem várólistás) kurzus és a
   rangsoros kurzusok szerverválasza.
-- **Tétlen munkamenet.** A tényleg magára hagyott fül munkamenete lejárhat; az
-  NPU szándékosan nem tartja életben vak háttérforgalommal.
+- **Tétlen munkamenet.** A magára hagyott fül munkamenete alapból lejár. Az
+  elindított Rajtoló a visszaszámlálás alatt, a bekapcsolt **Munkamenet
+  életben tartása** pedig mindig életben tartja, de csak a tárgyfelvételi
+  oldalon. Mindkettő a Neptun saját keresőgombját nyomja meg. Más oldalon az NPU
+  nem tudja megakadályozni a kiléptetést.
 - **Ütközésjelzés.** Csak azokkal a kurzusokkal számol, amelyekhez a Neptun
   felismerhető azonosítót, és órarendi adatot vagy értelmezhető megjegyzést ad.
   Hiányzó időpontnál ezt jelzi, és nem állítja, hogy nincs ütközés.

@@ -21,6 +21,51 @@ function normaliseAuth(value) {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+// Two claims of the captured JWT, read in memory only: never stored, logged or sent.
+// The access token lives 5 minutes, so the header changes all the time; SessionId is
+// what stays put across Account/GetNewTokens and moves on a new login.
+let authSessionId = null;
+let authTiming = { issuedAtMs: null, expiresAtMs: null };
+
+function readAuthClaims(header) {
+  const none = { sessionId: null, issuedAtMs: null, expiresAtMs: null };
+  const part = typeof header === "string" ? header.replace(/^Bearer\s+/i, "").split(".")[1] : null;
+  if (!part) {
+    return none;
+  }
+  try {
+    const payload = JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/")));
+    return {
+      sessionId: payload && typeof payload.SessionId === "string" && payload.SessionId ? payload.SessionId : null,
+      issuedAtMs: payload && Number.isFinite(payload.iat) ? payload.iat * 1000 : null,
+      expiresAtMs: payload && Number.isFinite(payload.exp) ? payload.exp * 1000 : null,
+    };
+  } catch (e) {
+    return none;
+  }
+}
+
+// Whether a page request tells us something about the session. Not every API call
+// carries Authorization: on load the page sends General/GetHWebErrorReporting...
+// without one (measured), and taking that for a logout wiped the Neptun code the
+// UserInfo had just delivered. Measured on unideb: the one header-less call that
+// means a session boundary is the login's Account/Authenticate; logout sends no
+// request at all and shows only as the /login route (index.js).
+function isAuthSignal(endpoint, header) {
+  return Boolean(normaliseAuth(header)) || endpoint === "Account/Authenticate";
+}
+
+// Whether a header change may mean somebody else. A new token of the same session
+// does not; neither does a 401, which only says this token died. A header-less page
+// request (logout) does, and so does anything we cannot read: another tab logging in
+// with another account swaps the shared cookie, and so this tab's next token too.
+function isUserBoundary(previousSessionId, nextAuth, nextSessionId, status) {
+  if (!nextAuth) {
+    return status !== 401;
+  }
+  return !previousSessionId || !nextSessionId || previousSessionId !== nextSessionId;
+}
+
 // Best-effort: a feature must never break the page's own XHR by failing here.
 function setAuthHeader(value, metadata, force) {
   const next = normaliseAuth(value);
@@ -34,9 +79,21 @@ function setAuthHeader(value, metadata, force) {
     return;
   }
   lastAuthHeader = next;
+  const claims = readAuthClaims(next);
+  const previousSessionId = authSessionId;
+  const userBoundary = isUserBoundary(authSessionId, next, claims.sessionId, metadata && metadata.status);
+  if (next || userBoundary) {
+    authSessionId = claims.sessionId;
+  }
+  // A retired header keeps its timing: the keep-alive still has to know how old the
+  // session's last renewal is after a 401 took the header away.
+  if (next) {
+    authTiming = { issuedAtMs: claims.issuedAtMs, expiresAtMs: claims.expiresAtMs };
+  }
+  const info = Object.assign({}, metadata, { userBoundary, previousSessionId });
   authHandlers.slice().forEach(handler => {
     try {
-      handler(next, metadata || null);
+      handler(next, info);
     } catch (e) {
       // An observer is advisory and must not interrupt the app request.
     }
@@ -46,6 +103,19 @@ function setAuthHeader(value, metadata, force) {
 // Null before the app's first authenticated call.
 function getAuthHeader() {
   return lastAuthHeader;
+}
+
+// When the page last sent an API request of its own. Neptun logs out 15 minutes
+// after that (measured), and our own requests, marked __npuOwn, do not count.
+let lastPageRequestAt = null;
+
+function getLastPageRequestAt() {
+  return lastPageRequestAt;
+}
+
+// When the captured token was issued and expires, in epoch ms; nulls if unknown.
+function getAuthTiming() {
+  return authTiming;
 }
 
 // Logout can show up as a route change before the next API request, so modules need
@@ -216,9 +286,13 @@ function patchXhr(target) {
   };
   const send = XHR.prototype.send;
   XHR.prototype.send = function (...args) {
-    // Angular sends Authorization on every measured API call; if it does not, this
-    // is the observable logout boundary, so clear what we captured.
-    if (getEndpoint(this.__npuUrl || this.url)) {
+    // A header-less Account/Authenticate (a new login) is a session boundary; logout
+    // itself sends nothing and shows only as the /login route (index.js).
+    const endpoint = getEndpoint(this.__npuUrl || this.url);
+    if (endpoint && !this.__npuOwn) {
+      lastPageRequestAt = Date.now();
+    }
+    if (endpoint && isAuthSignal(endpoint, this.__npuAuthHeader)) {
       setAuthHeader(this.__npuAuthHeader, {
         requestId: this.__npuRequestId,
         url: this.__npuUrl || this.url,
@@ -269,7 +343,8 @@ function patchFetch(target) {
     const requestId = ++nextRequestId;
     const originalUrl = typeof input === "string" ? input : input && input.url;
     const authHeader = readFetchAuth(input, init);
-    if (getEndpoint(originalUrl)) {
+    const endpoint = getEndpoint(originalUrl);
+    if (endpoint && isAuthSignal(endpoint, authHeader)) {
       setAuthHeader(authHeader, { requestId, url: originalUrl, source: "fetch" });
     }
     const url = typeof input === "string" ? rewriteUrl(input, { requestId }) : input;
@@ -342,6 +417,11 @@ module.exports = {
   onRequest,
   onResponse,
   getAuthHeader,
+  getAuthTiming,
+  getLastPageRequestAt,
+  readAuthClaims,
+  isUserBoundary,
+  isAuthSignal,
   clearAuthHeader,
   invalidateAuthHeader,
   allowAuthRetry,

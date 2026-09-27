@@ -51,6 +51,8 @@ const registrationData = require("../registrationData");
 const tokens = require("../neptunTokens");
 
 const ROUTE = "/hallgato_ng/subjects/registration";
+// Neptun's dayOfWeek, 1 = Monday (measured); the full name stays in the chip's title.
+const DAY_SHORT = ["V", "H", "K", "Sze", "Cs", "P", "Szo"];
 const ROW_SELECTOR = "neptun-course-list-item";
 const SUBJECT_ROW_SELECTOR = "neptun-subject-list-item";
 const NATIVE_TYPE_SECTION_SELECTOR = "section.subject-type-container";
@@ -71,15 +73,17 @@ const movedControlOrigins = new WeakMap();
 const meta = {
   id: "subjectRegistrationView",
   name: "Táblázatos kurzuslista",
+  where: "Tárgyak › Tárgyfelvétel: a lenyitott tárgy kurzuslistája",
   description:
     "A kinyitott tárgy kurzusait táblázatként jeleníti meg (állapot, kód, nap/idő, " +
     "terem, létszám, ütközés, akciók) a natív, ismétlődő lista helyett.",
   defaultEnabled: false,
-  group: { id: "design", name: "Megjelenés" },
+  group: "registration",
   options: [
     {
       id: "sortFilter",
       name: "Rendezés és szűrők",
+      where: "Tárgyak › Tárgyfelvétel: a kurzustáblázat fölötti „Nézet” sor",
       description: "Nap/idő, szabad hely és kód szerinti rendezés, plusz ütközésmentes/szabad hely szűrő.",
       defaultEnabled: true,
     },
@@ -228,7 +232,7 @@ function conflictVerdict(course, baseline, baselineComplete) {
   }
   return {
     state: "ok",
-    label: "✓",
+    label: "Nincs ütközés",
     title: "Nem ütközik a felvett vagy tervezett kurzusaiddal.",
     names: [],
   };
@@ -549,10 +553,14 @@ function restoreActionControls(cell) {
 // ours ever stands next to it on screen.
 function paintSeatsCell(cell, course) {
   const text = seatCountText(course);
+  const meter = cell.querySelector("[data-npu-seat-meter]");
   if (text === "—") {
     const existingBadge = cell.querySelector("[data-npu-seats]");
     if (existingBadge) {
       existingBadge.remove();
+    }
+    if (meter) {
+      meter.remove();
     }
     if (cell.textContent !== "—") {
       cell.textContent = "—";
@@ -566,6 +574,25 @@ function paintSeatsCell(cell, course) {
   }
   const state = seatState(course);
   badge.paint(cell, cell, "data-npu-seats", text, seatVariant(state), seatsTitle(state, course));
+  // How full, at a glance. Drawn from the two counts only; the colour, like the
+  // badge's, comes from seatState - never from the arithmetic (invariant 5).
+  const bar = meter || cell.ownerDocument.createElement("div");
+  if (!meter) {
+    bar.setAttribute("data-npu-seat-meter", "");
+    bar.setAttribute("aria-hidden", "true");
+    bar.appendChild(cell.ownerDocument.createElement("span"));
+    cell.appendChild(bar);
+  }
+  const ratio = course.maxLimit > 0 ? Math.min(course.registeredStudentsCount / course.maxLimit, 1) : 0;
+  const width = `${Math.round(ratio * 100)}%`;
+  const fill = bar.firstChild;
+  if (fill.style.width !== width) {
+    fill.style.width = width;
+  }
+  const tone = seatVariant(state);
+  if (bar.getAttribute("data-tone") !== tone) {
+    bar.setAttribute("data-tone", tone);
+  }
 }
 
 // The code cell plus, only when it differs from the subject-wide common value, the
@@ -577,11 +604,18 @@ function paintCodeCell(cell, course, uniformTutor, uniformLanguage) {
     cell.textContent = "";
     codeLine = cell.ownerDocument.createElement("div");
     codeLine.setAttribute("data-npu-code-line", "");
+    const code = cell.ownerDocument.createElement("span");
+    code.setAttribute("data-npu-code-text", "");
+    codeLine.appendChild(code);
     cell.appendChild(codeLine);
   }
-  if (codeLine.textContent !== codeText) {
-    codeLine.textContent = codeText;
+  const codeSpan = codeLine.querySelector("[data-npu-code-text]");
+  if (codeSpan.textContent !== codeText) {
+    codeSpan.textContent = codeText;
   }
+  // Your own relationship to the course sits right by its code, not in a column of
+  // its own that stays empty on every other row.
+  paintEnrolledState(codeLine, course);
 
   const extras = [];
   if (differsFromUniform(course.tutorName, uniformTutor)) {
@@ -600,7 +634,6 @@ function paintCodeCell(cell, course, uniformTutor, uniformLanguage) {
   if (!extraLine) {
     extraLine = cell.ownerDocument.createElement("div");
     extraLine.setAttribute("data-npu-code-extra", "");
-    extraLine.style.cssText = "font-size:12px;opacity:.75;";
     cell.appendChild(extraLine);
   }
   const text = extras.join(" · ");
@@ -660,16 +693,41 @@ function paintEnrolledState(cell, course) {
 }
 
 function paintConflictBadge(cell, verdict) {
-  if (verdict.state === "enrolled") {
-    badge.paint(cell, cell, "data-npu-row-conflict", null, null, null);
+  const variant =
+    verdict.state === "enrolled"
+      ? null
+      : verdict.state === "conflict"
+        ? "full"
+        : verdict.state === "ok"
+          ? "free"
+          : "neutral";
+  badge.paint(cell, cell, "data-npu-row-conflict", verdict.label || null, variant, verdict.title || null);
+  const pill = cell.querySelector("[data-npu-row-conflict]");
+  if (pill && pill !== cell.firstElementChild) {
+    cell.insertBefore(pill, cell.firstElementChild);
+  }
+  // What it clashes with, in words, under the badge: the reason to skip this row.
+  const names = verdict.state === "conflict" ? verdict.names.join(", ") : "";
+  let line = cell.querySelector("[data-npu-conflict-names]");
+  if (!names) {
+    if (line) {
+      line.remove();
+    }
     return;
   }
-  const variant = verdict.state === "conflict" ? "full" : verdict.state === "ok" ? "free" : "neutral";
-  badge.paint(cell, cell, "data-npu-row-conflict", verdict.label, variant, verdict.title || null);
+  if (!line) {
+    line = cell.ownerDocument.createElement("div");
+    line.setAttribute("data-npu-conflict-names", "");
+    cell.appendChild(line);
+  }
+  if (line.textContent !== names) {
+    line.textContent = names;
+    line.title = verdict.title || names;
+  }
 }
 
 function columnLabels() {
-  return ["Állapot", "Kód", "Nap, idő", "Terem", "Létszám", "Ütközés", "Akciók"];
+  return ["Kurzus", "Időpont", "Létszám", "Ütközés", "Műveletek"];
 }
 
 function buildSectionTable(doc) {
@@ -678,7 +736,7 @@ function buildSectionTable(doc) {
   table.setAttribute("role", "table");
   table.setAttribute("aria-label", "Kurzusok");
   const colgroup = doc.createElement("colgroup");
-  ["9%", "17%", "17%", "16%", "11%", "11%", "19%"].forEach(width => {
+  ["23%", "24%", "13%", "17%", "23%"].forEach(width => {
     const col = doc.createElement("col");
     col.style.width = width;
     colgroup.appendChild(col);
@@ -706,82 +764,56 @@ function buildSectionTable(doc) {
 // One row per course. Extra sessions (rare - see docs/API.md, none were measured in
 // the sample) get a continuation row below it holding only nap+idő and terem, per the
 // spec: never invent a room/time for a course that plainly has only one.
+// One row per course; every weekly session is a line of its own inside the time cell,
+// its room beside it - never a room or time invented for a course that has none.
 function buildRow(doc, model) {
   const labels = columnLabels();
   const tr = doc.createElement("tr");
   tr.setAttribute("data-npu-course-row", "");
   tr.setAttribute("role", "row");
-  const slots = model.slots;
-  const rowspan = String(Math.max(slots.length, 1));
+  const cell = (label, attribute) => {
+    const td = doc.createElement("td");
+    td.setAttribute("role", "cell");
+    td.setAttribute("data-label", label);
+    if (attribute) {
+      td.setAttribute(attribute, "");
+    }
+    return td;
+  };
 
-  const stateTd = doc.createElement("td");
-  stateTd.setAttribute("role", "cell");
-  stateTd.setAttribute("data-npu-state", "");
-  stateTd.setAttribute("rowspan", rowspan);
-  stateTd.setAttribute("data-label", labels[0]);
-  paintEnrolledState(stateTd, model.course);
-
-  const codeTd = doc.createElement("td");
-  codeTd.setAttribute("role", "cell");
-  codeTd.setAttribute("data-npu-course-identity", "");
-  codeTd.setAttribute("rowspan", rowspan);
-  codeTd.setAttribute("data-label", labels[1]);
-
-  const timeTd = doc.createElement("td");
-  timeTd.setAttribute("role", "cell");
-  timeTd.setAttribute("data-npu-schedule", "");
-  timeTd.setAttribute("data-label", labels[2]);
-  const roomTd = doc.createElement("td");
-  roomTd.setAttribute("role", "cell");
-  roomTd.setAttribute("data-npu-room", "");
-  roomTd.setAttribute("data-label", labels[3]);
-  if (slots.length === 0) {
+  const codeTd = cell(labels[0], "data-npu-course-identity");
+  const timeTd = cell(labels[1], "data-npu-schedule");
+  if (model.slots.length === 0) {
     timeTd.textContent = "—";
-    roomTd.textContent = "—";
-  } else {
-    timeTd.textContent = formatSlotTime(slots[0]);
-    roomTd.textContent = slots[0].rooms || "—";
   }
-
-  const seatsTd = doc.createElement("td");
-  seatsTd.setAttribute("role", "cell");
-  seatsTd.setAttribute("data-npu-seats-cell", "");
-  seatsTd.setAttribute("rowspan", rowspan);
-  seatsTd.setAttribute("data-label", labels[4]);
-
-  const conflictTd = doc.createElement("td");
-  conflictTd.setAttribute("role", "cell");
-  conflictTd.setAttribute("data-npu-conflict-cell", "");
-  conflictTd.setAttribute("rowspan", rowspan);
-  conflictTd.setAttribute("data-label", labels[5]);
-
-  const actionsTd = doc.createElement("td");
-  actionsTd.setAttribute("role", "cell");
-  actionsTd.setAttribute("rowspan", rowspan);
-  actionsTd.setAttribute("data-label", labels[6]);
+  model.slots.forEach(slot => {
+    const line = doc.createElement("div");
+    line.setAttribute("data-npu-slot", "");
+    const day = doc.createElement("span");
+    day.setAttribute("data-npu-day", "");
+    day.textContent = DAY_SHORT[slot.day] || slot.dayLabel || "";
+    day.title = slot.dayLabel || "";
+    const time = doc.createElement("span");
+    time.setAttribute("data-npu-time", "");
+    time.textContent = `${formatClock(slot.start)}–${formatClock(slot.end)}`;
+    line.append(day, time);
+    if (slot.rooms) {
+      const room = doc.createElement("span");
+      room.setAttribute("data-npu-room", "");
+      room.textContent = slot.rooms;
+      line.appendChild(room);
+    }
+    timeTd.appendChild(line);
+  });
+  const seatsTd = cell(labels[2], "data-npu-seats-cell");
+  const conflictTd = cell(labels[3], "data-npu-conflict-cell");
+  const actionsTd = cell(labels[4]);
   const actionsHost = doc.createElement("div");
   actionsHost.setAttribute("data-npu-actions", "");
   actionsTd.appendChild(actionsHost);
 
-  tr.append(stateTd, codeTd, timeTd, roomTd, seatsTd, conflictTd, actionsTd);
-
-  const extraRows = slots.slice(1).map(slot => {
-    const extraTr = doc.createElement("tr");
-    extraTr.setAttribute("data-npu-extra-session", "");
-    extraTr.setAttribute("role", "row");
-    const t1 = doc.createElement("td");
-    t1.setAttribute("role", "cell");
-    t1.setAttribute("data-label", labels[2]);
-    t1.textContent = formatSlotTime(slot);
-    const t2 = doc.createElement("td");
-    t2.setAttribute("role", "cell");
-    t2.setAttribute("data-label", labels[3]);
-    t2.textContent = slot.rooms || "—";
-    extraTr.append(t1, t2);
-    return extraTr;
-  });
-
-  return { tr, extraRows, codeTd, seatsTd, conflictTd, actionsTd: actionsHost };
+  tr.append(codeTd, timeTd, seatsTd, conflictTd, actionsTd);
+  return { tr, extraRows: [], codeTd, seatsTd, conflictTd, actionsTd: actionsHost };
 }
 
 function buildFilter(doc, label, onToggle) {
@@ -877,6 +909,7 @@ function buildViewToolbar(doc, state) {
   const label = doc.createElement("span");
   label.setAttribute("data-npu-toolbar-label", "");
   label.textContent = "Nézet";
+  utils.markNpu(label, "Táblázatos kurzuslista");
 
   const conflictFilter = buildFilter(doc, "Csak ütközésmentes", () => {
     state.filters.conflictFree = conflictFilter.input.checked;
@@ -938,19 +971,23 @@ function applyFiltersAndSort(section, state) {
     emptyRow.setAttribute("role", "row");
     const emptyCell = section.tbody.ownerDocument.createElement("td");
     emptyCell.setAttribute("role", "cell");
-    emptyCell.colSpan = 7;
+    emptyCell.colSpan = 5;
     emptyCell.textContent = section.emptyText;
     emptyRow.appendChild(emptyCell);
     section.emptyRow = emptyRow;
   }
   section.emptyRow.hidden = filtered.length > 0;
 
-  const current = Array.from(section.tbody.children).filter(node => node !== section.emptyRow);
-  const unchanged = current.length >= target.length && target.every((node, i) => node === current[i]);
+  // Compared against the VISIBLE rows only. Hidden rows stay where they are, so with a
+  // filter on, comparing against every row never matched and each repaint re-appended
+  // the visible rows, moving the real controls inside them and the focus with them.
+  const shown = new Set(target);
+  const current = Array.from(section.tbody.children).filter(node => shown.has(node));
+  const unchanged = current.length === target.length && target.every((node, i) => node === current[i]);
   if (!unchanged) {
     target.forEach(node => section.tbody.appendChild(node));
   }
-  if (section.emptyRow.previousSibling !== target[target.length - 1]) {
+  if (section.tbody.lastElementChild !== section.emptyRow) {
     section.tbody.appendChild(section.emptyRow);
   }
 }
@@ -1007,10 +1044,58 @@ function refreshSection(section, courses, rowByCourseId, snapshot, uniformTutor,
       entry.freeSeat === true
   ).length;
   const summary = sectionSummary(sectionTypeLabel(courses), courses.length, available, registered);
-  if (section.heading.textContent !== summary) {
-    section.heading.textContent = summary;
+  if (section.heading.getAttribute("aria-label") !== summary) {
+    paintHeading(section.heading, sectionTypeLabel(courses), courses.length, available, registered);
+    section.heading.setAttribute("aria-label", summary);
   }
+  currentRows.forEach(entry => {
+    const rowState = rowStateOf(entry);
+    if (entry.tr.getAttribute("data-npu-row-state") !== rowState) {
+      entry.tr.setAttribute("data-npu-row-state", rowState);
+    }
+  });
   applyFiltersAndSort(section, state);
+}
+
+// A section title the eye can scan: the type, then its counts as chips. The plain
+// sentence stays as the heading's accessible name.
+function paintHeading(heading, type, total, available, registered) {
+  const doc = heading.ownerDocument;
+  heading.textContent = "";
+  const name = doc.createElement("span");
+  name.setAttribute("data-npu-section-type", "");
+  name.textContent = type || "Kurzusok";
+  heading.appendChild(name);
+  [
+    [`${total} kurzus`, "total"],
+    [registered > 0 ? `${registered} felvett` : null, "registered"],
+    [available > 0 || registered === 0 ? `${available} felvehető ütközés nélkül` : null, "available"],
+  ].forEach(([text, kind]) => {
+    if (!text) {
+      return;
+    }
+    const chip = doc.createElement("span");
+    chip.setAttribute("data-npu-chip", kind);
+    chip.setAttribute("aria-hidden", "true");
+    chip.textContent = text;
+    heading.appendChild(chip);
+  });
+}
+
+// Which way a row leans, for its accent: held, open to take, or out of reach. Pure.
+function rowStateOf(entry) {
+  const course = entry.course || {};
+  if (course.isSigned === true) {
+    return "enrolled";
+  }
+  if (course.isOnWaitingList === true) {
+    return "queued";
+  }
+  const verdict = entry.verdict || {};
+  if (verdict.state === "conflict" || entry.freeSeat === false) {
+    return "blocked";
+  }
+  return verdict.state === "ok" && entry.freeSeat === true ? "available" : "neutral";
 }
 
 function buildContainer(doc) {
@@ -1197,23 +1282,30 @@ function apply(root, snapshot) {
 function injectResponsiveCss() {
   utils.injectCss(`
     [${CONTAINER_ATTR}] {
-      --npu-subject-rule: rgba(33,48,85,.14);
-      --npu-subject-rule: color-mix(in srgb, ${tokens.text} 14%, transparent);
+      --npu-subject-rule: rgba(33,48,85,.12);
+      --npu-subject-rule: color-mix(in srgb, ${tokens.text} 12%, transparent);
+      --npu-subject-soft: rgba(33,48,85,.04);
+      --npu-subject-soft: color-mix(in srgb, ${tokens.text} 4%, transparent);
+      --npu-ok: #34b39a;
+      --npu-bad: #b3261e;
+      --npu-warn: #f5b82e;
       margin-top: 4px;
     }
     [${CONTAINER_ATTR}] [data-npu-view-toolbar] {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-      gap: 8px 16px;
-      padding: 8px 0 10px;
-      margin: 0 0 10px;
-      border-bottom: 1px solid var(--npu-subject-rule);
+      gap: 6px 18px;
+      padding: 8px 12px;
+      margin: 0 0 14px;
+      border-radius: 10px;
+      background: var(--npu-subject-soft);
       font-size: 13px;
     }
     [${CONTAINER_ATTR}] [data-npu-toolbar-label] {
+      display: inline-flex;
+      align-items: center;
       font-weight: 700;
-      margin-right: 2px;
     }
     [${CONTAINER_ATTR}] [data-npu-filter],
     [${CONTAINER_ATTR}] [data-npu-sort] {
@@ -1233,50 +1325,106 @@ function injectResponsiveCss() {
     [${CONTAINER_ATTR}] [data-npu-sort] select {
       min-height: 32px;
       max-width: 12rem;
+      padding: 0 8px;
+      border: 1px solid var(--npu-subject-rule);
+      border-radius: 8px;
+      background: ${tokens.surface};
+      color: ${tokens.text};
       font: inherit;
     }
     [${CONTAINER_ATTR}] [data-npu-course-section] {
-      margin: 0 0 18px;
+      margin: 0 0 20px;
     }
     [${CONTAINER_ATTR}] [data-npu-section-heading] {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       min-height: 34px;
       margin: 0;
-      padding: 4px 0 6px;
-      border-bottom: 1px solid var(--npu-subject-rule);
+      padding: 2px 0 8px;
     }
     [${CONTAINER_ATTR}] [data-npu-section-heading] h4 {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 8px;
       margin: 0;
       font-size: 16px;
       line-height: 1.3;
     }
+    [${CONTAINER_ATTR}] [data-npu-section-type] {
+      /* Neptun's own titles (measured): LatoWeb has no heavier face to synthesise. */
+      font-family: "Source Sans Pro", sans-serif;
+      font-weight: 900 !important;
+      margin-right: 4px;
+    }
+    [${CONTAINER_ATTR}] [data-npu-chip] {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 9px;
+      border-radius: 10px;
+      background: var(--npu-subject-soft);
+    }
+    [${CONTAINER_ATTR}] [data-npu-chip="registered"] {
+      background: rgba(52,179,154,.16);
+    }
+    [${CONTAINER_ATTR}] [data-npu-chip="available"] {
+      background: rgba(9,67,217,.10);
+    }
     [${CONTAINER_ATTR}] [data-npu-course-table] {
       width: 100%;
       table-layout: fixed;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       margin: 0;
       font: inherit;
+      border: 1px solid var(--npu-subject-rule);
+      border-radius: 10px;
+      overflow: hidden;
     }
     [${CONTAINER_ATTR}] [data-npu-course-table] th {
-      padding: 8px 10px 6px;
+      padding: 8px 12px;
       border-bottom: 1px solid var(--npu-subject-rule);
+      background: var(--npu-subject-soft);
       text-align: left;
-      font-size: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
       line-height: 1.2;
-      opacity: .72;
+      opacity: .75;
     }
     [${CONTAINER_ATTR}] [data-npu-course-table] td {
       min-width: 0;
-      padding: 9px 10px;
+      padding: 10px 12px;
       border-bottom: 1px solid var(--npu-subject-rule);
       text-align: left;
       vertical-align: middle;
       line-height: 1.35;
       overflow-wrap: anywhere;
     }
+    [${CONTAINER_ATTR}] [data-npu-course-table] tbody tr:last-child td {
+      border-bottom: 0;
+    }
+    [${CONTAINER_ATTR}] [data-npu-course-table] td:first-child {
+      border-left: 3px solid transparent;
+    }
+    [${CONTAINER_ATTR}] tr[data-npu-row-state="enrolled"] td {
+      background: rgba(52,179,154,.07);
+    }
+    [${CONTAINER_ATTR}] tr[data-npu-row-state="enrolled"] td:first-child {
+      border-left-color: var(--npu-ok);
+    }
+    [${CONTAINER_ATTR}] tr[data-npu-row-state="queued"] td:first-child {
+      border-left-color: var(--npu-warn);
+    }
+    [${CONTAINER_ATTR}] tr[data-npu-row-state="available"] td:first-child {
+      border-left-color: ${tokens.primary};
+    }
+    [${CONTAINER_ATTR}] tr[data-npu-row-state="blocked"] td:not(:last-child) > * {
+      opacity: .6;
+    }
     [${CONTAINER_ATTR}] [data-npu-course-table] tr[data-npu-empty] td {
-      padding: 16px 10px;
+      padding: 16px 12px;
       text-align: center;
       opacity: .72;
     }
@@ -1284,8 +1432,77 @@ function injectResponsiveCss() {
       background: rgba(33,48,85,.035);
       background: color-mix(in srgb, ${tokens.text} 3.5%, transparent);
     }
-    [${CONTAINER_ATTR}] [data-npu-course-table] [data-npu-course-identity] {
+    [${CONTAINER_ATTR}] [data-npu-code-line] {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+    }
+    [${CONTAINER_ATTR}] [data-npu-code-text] {
+      font-weight: 700 !important;
+      font-variant-numeric: tabular-nums;
+    }
+    [${CONTAINER_ATTR}] [data-npu-code-extra] {
+      margin-top: 3px;
+      font-size: 12px;
+      line-height: 1.3;
+      opacity: .7;
+    }
+    [${CONTAINER_ATTR}] [data-npu-slot] {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 2px 8px;
+    }
+    [${CONTAINER_ATTR}] [data-npu-slot] + [data-npu-slot] {
+      margin-top: 4px;
+    }
+    [${CONTAINER_ATTR}] [data-npu-day] {
+      min-width: 2.2em;
+      padding: 1px 6px;
+      border-radius: 6px;
+      background: var(--npu-subject-soft);
+      border: 1px solid var(--npu-subject-rule);
+      font-size: 12px;
       font-weight: 700;
+      text-align: center;
+    }
+    [${CONTAINER_ATTR}] [data-npu-time] {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    [${CONTAINER_ATTR}] [data-npu-room] {
+      flex-basis: 100%;
+      font-size: 12px;
+      opacity: .7;
+    }
+    [${CONTAINER_ATTR}] [data-npu-seat-meter] {
+      width: 72px;
+      max-width: 100%;
+      height: 4px;
+      margin-top: 5px;
+      border-radius: 2px;
+      background: var(--npu-subject-rule);
+      overflow: hidden;
+    }
+    [${CONTAINER_ATTR}] [data-npu-seat-meter] > span {
+      display: block;
+      height: 100%;
+      border-radius: 2px;
+      background: ${tokens.text};
+      opacity: .45;
+    }
+    [${CONTAINER_ATTR}] [data-npu-seat-meter][data-tone="free"] > span {
+      background: var(--npu-ok);
+      opacity: 1;
+    }
+    [${CONTAINER_ATTR}] [data-npu-seat-meter][data-tone="partial"] > span {
+      background: var(--npu-warn);
+      opacity: 1;
+    }
+    [${CONTAINER_ATTR}] [data-npu-seat-meter][data-tone="full"] > span {
+      background: var(--npu-bad);
+      opacity: 1;
     }
     [${CONTAINER_ATTR}] [data-npu-row-conflict] {
       max-width: 100%;
@@ -1294,19 +1511,23 @@ function injectResponsiveCss() {
       white-space: nowrap;
       vertical-align: middle;
     }
-    [${CONTAINER_ATTR}] [data-npu-code-extra] {
-      margin-top: 2px;
+    [${CONTAINER_ATTR}] [data-npu-conflict-names] {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      margin-top: 4px;
+      overflow: hidden;
       font-size: 12px;
-      font-weight: 400;
-      line-height: 1.25;
-      opacity: .72;
+      line-height: 1.3;
+      opacity: .8;
     }
     [${CONTAINER_ATTR}] [data-npu-actions] {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       flex-wrap: wrap;
-      gap: 5px 8px;
+      gap: 6px 12px;
       min-width: 0;
+      font-size: 13px;
     }
     [${CONTAINER_ATTR}] [data-npu-actions] > * {
       max-width: 100%;
@@ -1322,23 +1543,25 @@ function injectResponsiveCss() {
     @media (min-width: 1025px) {
       [${CONTAINER_ATTR}] [data-npu-actions] {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         grid-template-areas:
           "checkbox details"
-          "planner planner"
-          "rajtolo rajtolo";
+          "planner rajtolo";
         align-items: center;
-        gap: 5px 8px;
+        gap: 4px 14px;
       }
       [${CONTAINER_ATTR}] [data-npu-actions] > mat-checkbox {
         grid-area: checkbox;
       }
       [${CONTAINER_ATTR}] [data-npu-actions] > .course-details-button {
         grid-area: details;
+        justify-self: end;
       }
       [${CONTAINER_ATTR}] [data-npu-actions] > .course-action-status__add {
         justify-content: space-between;
+        gap: 6px;
         width: 100%;
+        font-size: 13px;
       }
       [${CONTAINER_ATTR}] [data-npu-actions] > .course-action-status__add:not([data-npu-rajtolo]) {
         grid-area: planner;
@@ -1347,10 +1570,6 @@ function injectResponsiveCss() {
         grid-area: rajtolo;
       }
       [${CONTAINER_ATTR}] [data-npu-actions] > * {
-        white-space: normal;
-      }
-      [${CONTAINER_ATTR}] [data-npu-actions] > mat-checkbox,
-      [${CONTAINER_ATTR}] [data-npu-actions] > .course-details-button {
         white-space: nowrap;
       }
     }
@@ -1359,6 +1578,10 @@ function injectResponsiveCss() {
       max-width: 100%;
     }
     @media (max-width: 1024px) {
+      [${CONTAINER_ATTR}] [data-npu-course-table] {
+        border: 0;
+        border-radius: 0;
+      }
       [${CONTAINER_ATTR}] [data-npu-course-table],
       [${CONTAINER_ATTR}] [data-npu-course-table] thead,
       [${CONTAINER_ATTR}] [data-npu-course-table] tbody,
@@ -1379,19 +1602,26 @@ function injectResponsiveCss() {
         white-space: nowrap;
       }
       [${CONTAINER_ATTR}] [data-npu-course-table] tbody tr {
-        padding: 9px 0;
-        border-bottom: 1px solid var(--npu-subject-rule);
+        margin: 0 0 8px;
+        padding: 8px 12px;
+        border: 1px solid var(--npu-subject-rule);
+        border-left-width: 3px;
+        border-radius: 10px;
       }
-      [${CONTAINER_ATTR}] [data-npu-course-table] tbody tr[data-npu-extra-session] {
-        padding-top: 0;
-        border-bottom: 0;
+      [${CONTAINER_ATTR}] tr[data-npu-row-state="enrolled"] {
+        border-left-color: var(--npu-ok) !important;
       }
-      [${CONTAINER_ATTR}] [data-npu-course-table] td {
+      [${CONTAINER_ATTR}] tr[data-npu-row-state="available"] {
+        border-left-color: ${tokens.primary} !important;
+      }
+      [${CONTAINER_ATTR}] [data-npu-course-table] td,
+      [${CONTAINER_ATTR}] [data-npu-course-table] td:first-child {
         display: grid;
         grid-template-columns: minmax(6.5rem, 28%) minmax(0, 1fr);
         gap: 8px;
-        padding: 3px 0;
+        padding: 4px 0;
         border: 0;
+        background: transparent !important;
         overflow-wrap: anywhere;
       }
       [${CONTAINER_ATTR}] [data-npu-course-table] tr[data-npu-empty] td {
@@ -1505,10 +1735,12 @@ module.exports = {
   isConflictFree,
   hasFreeSeat,
   filterRows,
+  applyFiltersAndSort,
   seatCountText,
   seatState,
   freeSeatFromCourse,
   seatVariant,
   formatSlotTime,
   buildRowModel,
+  rowStateOf,
 };

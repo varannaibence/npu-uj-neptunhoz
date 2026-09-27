@@ -155,6 +155,14 @@ function cloneButton(source) {
     clone.classList.remove("loading");
     clone.classList.remove("disabled");
   }
+  // A clone of one of our own marked buttons is not that feature: drop the mark.
+  if (clone.hasAttribute && clone.hasAttribute("data-npu-feature")) {
+    clone.removeAttribute("data-npu-feature");
+    clone.removeAttribute("title");
+  }
+  Array.from((clone.querySelectorAll && clone.querySelectorAll("svg[data-npu-icon]")) || []).forEach(icon =>
+    icon.remove()
+  );
   return clone;
 }
 
@@ -162,11 +170,44 @@ function cloneButton(source) {
 // the text in the host's own colour - the background colour. See cloneButton.
 function setButtonLabel(button, text) {
   const label = button.querySelector && button.querySelector(".neptun-button__label");
-  if (label) {
-    label.textContent = text;
-    return;
+  // A relabel keeps the NPU mark; writing textContent alone would wipe it.
+  const mark = button.querySelector && button.querySelector("svg[data-npu-icon]");
+  const host = label || button;
+  host.textContent = text;
+  if (mark) {
+    host.insertBefore(mark, host.firstChild);
   }
-  button.textContent = text;
+}
+
+// Every control the NPU adds to a Neptun page carries the same sign: the NPU icon
+// before its caption and a tooltip saying so, so nobody takes it for Neptun's own -
+// or reports its bugs to their university. Idempotent.
+function markNpu(element, what) {
+  if (!element || !element.setAttribute) {
+    return element;
+  }
+  element.setAttribute("data-npu-feature", "");
+  element.title = what ? `${what} – NPU-funkció` : "NPU-funkció";
+  if (!element.querySelector("svg[data-npu-icon]")) {
+    const icon = require("./logo").icon(element.ownerDocument || document, 16);
+    icon.setAttribute("data-npu-icon", "");
+    const label = element.querySelector(".neptun-button__label");
+    const host = label || captionParent(element) || element;
+    host.insertBefore(icon, host.firstChild);
+  }
+  return element;
+}
+
+// Where a caption's text sits when there is no `.neptun-button__label`: a cloned
+// switch keeps it in a nested span.
+function captionParent(root) {
+  const walker = (root.ownerDocument || document).createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.nodeValue && node.nodeValue.trim()) {
+      return node.parentNode;
+    }
+  }
+  return null;
 }
 
 function injectCss(css) {
@@ -243,6 +284,7 @@ module.exports = {
   injectCss,
   cloneButton,
   setButtonLabel,
+  markNpu,
   runAsync,
   parseSubjectCode,
   isPassingGrade,

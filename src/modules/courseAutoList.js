@@ -11,7 +11,9 @@ const MAX_ATTEMPTS = 20;
 // Shown in the settings panel; `id` is also the key the switch is stored under.
 const meta = {
   id: "courseAutoList",
+  group: "registration",
   name: "Tárgylista automatikus betöltése",
+  where: "Tárgyak › Tárgyfelvétel: az oldal megnyitásakor",
   description: "Megnyomja helyetted a „Tárgy keresése” gombot a tárgyfelvételi oldalon.",
   defaultEnabled: false,
 };
