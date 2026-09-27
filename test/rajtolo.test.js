@@ -197,6 +197,13 @@ assert.strictEqual(
   "unknown",
   "a timed-out request halts the run instead of re-posting a maybe-successful registration"
 );
+assert.strictEqual(
+  rajtolo.classifyResponse({
+    notification: [{ description: "A szerver nem válaszolt időben. A jelentkezés állapota bizonytalan.", type: 3 }],
+  }).message,
+  "A szerver nem válaszolt időben. A jelentkezés állapota bizonytalan.",
+  "the timeout's own warning reaches the student, not a generic one"
+);
 
 // the toast tone: a submitted request is deliberately not presented as enrollment
 assert.strictEqual(rajtolo.toastTone("submitted"), "warn");

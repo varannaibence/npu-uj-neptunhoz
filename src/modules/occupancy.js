@@ -100,13 +100,23 @@ function acceptsResponse(json, info) {
   return !activeTermId || activeTermId === termId;
 }
 
-// Field names measured off a live response.
+// Field names measured off a live response. Course codes repeat across subjects
+// ("01"), so a code two subjects share maps to null: no badge beats another
+// subject's headcount.
 function collectCourseStates(json, into) {
   const states = into || new Map();
   const rows = (json && json.data) || [];
   rows.forEach(row => {
     if (row && row.code) {
-      states.set(String(row.code).trim().toUpperCase(), {
+      const code = String(row.code).trim().toUpperCase();
+      const subjectId = row.subjectId || null;
+      const existing = states.get(code);
+      if (existing === null || (existing && existing.subjectId !== subjectId)) {
+        states.set(code, null);
+        return;
+      }
+      states.set(code, {
+        subjectId,
         isFull: typeof row.isFull === "boolean" ? row.isFull : null,
         willBeOnWaitingList: typeof row.willBeOnWaitingList === "boolean" ? row.willBeOnWaitingList : null,
         registered: typeof row.registeredStudentsCount === "number" ? row.registeredStudentsCount : null,
@@ -341,7 +351,7 @@ function applyCourses(root, enabled) {
       BADGE_FLAG,
       occupancyLabel(state),
       courseVariant(state),
-      courseTitle(state)
+      state && courseTitle(state)
     );
     const list = groups.get(row.parentElement) || [];
     list.push({ row, isFull: seatsGone(state) });

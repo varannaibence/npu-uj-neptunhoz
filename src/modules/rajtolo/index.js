@@ -155,7 +155,7 @@ function ensureState() {
       return;
     }
     storage
-      .initialize()
+      .whenReady()
       .then(() => {
         if (
           utils.getNeptunCode() !== identity ||

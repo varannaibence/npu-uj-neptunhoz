@@ -78,13 +78,16 @@ function planTargets(currentPlan, baseline) {
         ranking: group.ranking.slice(),
         swap: null,
         planned: [],
+        fromPlan: true,
       }));
     if (groups.length > 0) {
-      targets.set(subject.subjectId, { record: subject, groups, fromPlan: true });
+      targets.set(subject.subjectId, { record: subject, groups });
     }
   });
+  // The plan's own rule, so a group saved without a type id still takes its label's
+  // courses instead of a second group growing beside it.
   const sameType = (group, course) =>
-    course.comparationTypeId ? group.typeId === course.comparationTypeId : !group.typeId && group.type === course.type;
+    plan.sameCourseGroup(group, { typeId: course.comparationTypeId || null, type: course.type });
   (baseline || []).forEach(item => {
     // Only what the planner endpoint itself said: the per-subject list behind it is
     // not re-read after a planner write, so it can still name a removed course.
@@ -92,43 +95,42 @@ function planTargets(currentPlan, baseline) {
       return;
     }
     // What sits in Neptun's planner is remembered per group, so applying a suggestion
-    // can move it there too; a Rajtoló subject keeps its own ranking.
-    const planned = targets.get(item.course.subjectId);
-    if (planned && planned.fromPlan) {
-      const group = planned.groups.find(g => sameType(g, item.course));
-      if (group) {
-        group.planned.push(item.course.id);
+    // can move it there too; a Rajtoló group keeps its own ranking. Merged per group:
+    // a type only the planner has (say the lab of a Rajtoló lecture) joins the subject.
+    let target = targets.get(item.course.subjectId);
+    if (!target) {
+      const subject = item.subject || {};
+      const record = {
+        subjectId: item.course.subjectId,
+        termId: subject.termId,
+        curriculumTemplateId: subject.curriculumTemplateId,
+        curriculumTemplateLineId: subject.curriculumTemplateLineId,
+        title: subject.title || "",
+        code: subject.code || "",
+      };
+      if (!record.termId || !record.curriculumTemplateId || !record.curriculumTemplateLineId) {
+        return;
       }
-      return;
-    }
-    const subject = item.subject || {};
-    const record = {
-      subjectId: item.course.subjectId,
-      termId: subject.termId,
-      curriculumTemplateId: subject.curriculumTemplateId,
-      curriculumTemplateLineId: subject.curriculumTemplateLineId,
-      title: subject.title || "",
-      code: subject.code || "",
-    };
-    if (!record.termId || !record.curriculumTemplateId || !record.curriculumTemplateLineId) {
-      return;
+      target = { record, groups: [] };
     }
     const typeId = item.course.comparationTypeId || null;
-    const target = targets.get(record.subjectId) || { record, groups: [], fromPlan: false };
     const group = target.groups.find(g => sameType(g, item.course));
     if (group) {
-      group.ranking.push(item.course.id);
+      if (!group.fromPlan) {
+        group.ranking.push(item.course.id);
+      }
       group.planned.push(item.course.id);
     } else {
       target.groups.push({
         type: item.course.type || "",
         typeId,
         ranking: [item.course.id],
-        swap: heldIn(record.subjectId, typeId, item.course.type),
+        swap: heldIn(target.record.subjectId, typeId, item.course.type),
         planned: [item.course.id],
+        fromPlan: false,
       });
     }
-    targets.set(record.subjectId, target);
+    targets.set(target.record.subjectId, target);
   });
   return Array.from(targets.values());
 }
@@ -175,7 +177,7 @@ function solverInput(targets, catalog, baseline) {
         record: target.record,
         type,
         swap: group.swap || null,
-        fromPlan: Boolean(target.fromPlan),
+        fromPlan: Boolean(group.fromPlan),
         ranking: group.ranking.slice(),
         current: ranked.length > 0 ? ranked[0].id : null,
         planned: (group.planned || []).slice(),
@@ -713,15 +715,20 @@ function renderPanel(state) {
   // Offered once per computed suggestion: after an apply (or a failed one) the planner
   // it was computed from is gone, so only a recompute may offer it again.
   if ((ops.length > 0 || rajtoloChanges) && !view.busy && !view.stale && !view.partial) {
+    // A left-out group keeps its planned course and ranking, which the preview does not
+    // show and which may clash with the new picks: only a whole variant is applied.
+    const partial = variant.metrics.unplaced > 0;
     const apply = smallAction(ops.length > 0 ? "Alkalmazás…" : "Alkalmazás a Rajtolóba", true);
-    apply.disabled = state.running;
+    apply.disabled = state.running || partial;
     apply.title = state.running
       ? "A Rajtoló fut; leállítás után alkalmazható."
-      : ops.length > 0
-        ? "A Neptun Tervezőjében és a Rajtolóban alkalmazza; előtte megmutatja, mi változik."
-        : "A Rajtoló sorrendjét rendezi át; visszavonható.";
+      : partial
+        ? "Egy csoport nem fér be ütközés nélkül, így ez a javaslat nem alkalmazható; a meglévő kurzusa ütközhetne az újakkal."
+        : ops.length > 0
+          ? "A Neptun Tervezőjében és a Rajtolóban alkalmazza; előtte megmutatja, mi változik."
+          : "A Rajtoló sorrendjét rendezi át; visszavonható.";
     apply.addEventListener("click", () => {
-      if (state.running) {
+      if (state.running || partial) {
         return;
       }
       confirmApply(state, variant, ops, rajtoloChanges);
@@ -1347,14 +1354,15 @@ function compute(state) {
     });
 }
 
-// Milliseconds the captured token has left, on the server's clock; Infinity when its
-// expiry is unknown, 0 or less when it is gone.
+// Milliseconds the captured token has left; Infinity when its expiry is unknown, 0 or
+// less when it is gone. Local clock on purpose, as in protocol.sessionChore: Neptun
+// renews only a token that THIS browser's clock calls expired.
 function authLeftMs() {
   if (!interceptor.getAuthHeader()) {
     return 0;
   }
   const timing = interceptor.getAuthTiming();
-  const now = Date.now() + (interceptor.getServerOffsetMs() || 0);
+  const now = Date.now();
   return timing && typeof timing.expiresAtMs === "number" ? timing.expiresAtMs - now : Infinity;
 }
 

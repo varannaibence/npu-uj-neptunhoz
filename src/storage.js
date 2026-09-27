@@ -84,6 +84,12 @@ async function initialize() {
   return run;
 }
 
+// For a module that only needs the store loaded: the load in flight, or none at all
+// once done. initialize() itself reloads and rewrites the whole store every call.
+function whenReady() {
+  return initializationPromise || (initialized ? Promise.resolve() : initialize());
+}
+
 // Save all data to local storage
 function saveNow() {
   return gmSet("data", JSON.stringify(data));
@@ -296,6 +302,7 @@ async function upgradeSchema() {
 
 module.exports = {
   initialize,
+  whenReady,
   get,
   set,
   getForUser,

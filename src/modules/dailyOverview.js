@@ -150,18 +150,22 @@ function sortEvents(events, nowMs) {
   return { today, next, holidayToday, periods };
 }
 
+// An item without a readable deadline is still due: kept, last, with `days` null -
+// dropping it let the card claim there was nothing to pay.
 function dueItems(items, nowMs) {
   return (Array.isArray(items) ? items : [])
-    .filter(item => item && typeof item.latestExecutionDate === "string")
-    .map(item => ({
-      name: item.name || "Befizetendő tétel",
-      value: typeof item.value === "number" ? item.value : null,
-      currency: item.currency || "",
-      at: item.latestExecutionDate,
-      days: daysUntil(item.latestExecutionDate, nowMs),
-    }))
-    .filter(item => !Number.isNaN(item.days))
-    .sort((a, b) => a.days - b.days);
+    .filter(Boolean)
+    .map(item => {
+      const days = daysUntil(item.latestExecutionDate, nowMs);
+      return {
+        name: item.name || "Befizetendő tétel",
+        value: typeof item.value === "number" ? item.value : null,
+        currency: item.currency || "",
+        at: item.latestExecutionDate || null,
+        days: Number.isNaN(days) ? null : days,
+      };
+    })
+    .sort((a, b) => (a.days === null) - (b.days === null) || a.days - b.days);
 }
 
 function money(value, currency) {
@@ -176,7 +180,7 @@ function money(value, currency) {
 function alertsFor(overview) {
   const alerts = [];
   (overview.due || [])
-    .filter(item => item.days <= ALERT_DAYS)
+    .filter(item => item.days !== null && item.days <= ALERT_DAYS)
     .forEach(item => {
       alerts.push(
         item.days < 0
@@ -393,10 +397,10 @@ function fill(card, spec, overview) {
     items.push(entry("", "Nem sikerült betölteni a befizetendő tételeket.", "Próbáld újra az oldal frissítésével."));
   } else if (spec.key === "due") {
     overview.due.slice(0, 3).forEach(d => {
-      const when = d.days < 0 ? `lejárt ${dayWord(d.days)}` : `határidő ${dayWord(d.days)}`;
-      items.push(
-        entry("Befizetés", d.name, [money(d.value, d.currency), when].filter(Boolean).join(" · "), d.days <= ALERT_DAYS)
-      );
+      const when =
+        d.days === null ? "határidő nélkül" : d.days < 0 ? `lejárt ${dayWord(d.days)}` : `határidő ${dayWord(d.days)}`;
+      const alert = d.days !== null && d.days <= ALERT_DAYS;
+      items.push(entry("Befizetés", d.name, [money(d.value, d.currency), when].filter(Boolean).join(" · "), alert));
     });
     if (items.length === 0) {
       items.push(entry("", "Nincs befizetendő tétel.", ""));
@@ -466,7 +470,7 @@ function remind() {
   const code = utils.getNeptunCode();
   let previous;
   storage
-    .initialize()
+    .whenReady()
     .then(() => {
       previous = storage.getForUser("dailyOverview", "remindedOn");
       if (!code || utils.getNeptunCode() !== code || previous === today) {
