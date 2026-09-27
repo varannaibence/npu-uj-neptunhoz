@@ -361,3 +361,57 @@ assert.deepStrictEqual(suggest.plannerAnswer(null, "s"), { ok: false, message: "
   );
   assert.strictEqual(rajtoloNoId.length, 1, "a Rajtoló lab group is not dropped for a held lecture");
 }
+
+// applySteps: all or nothing, and the verdict comes from the planner read back.
+{
+  const record = Object.assign({ subjectId: "S9" }, ids);
+  const steps = [
+    { kind: "remove", courseId: "old", record },
+    { kind: "add", courseId: "new", record },
+    { kind: "remove", courseId: "other", record },
+  ];
+  const { STATUS_KEY } = require("../src/modules/rajtolo/constants");
+  const okAnswer = { [STATUS_KEY]: 200, notification: [] };
+  const scripted = answers => {
+    const sent = [];
+    const send = step => {
+      sent.push(`${step.kind}:${step.courseId}`);
+      return Promise.resolve(answers.length > 0 ? answers.shift() : okAnswer);
+    };
+    return { send, sent };
+  };
+  const check = async () => {
+    const clean = scripted([]);
+    const reads = [];
+    const done = await suggest.applySteps(steps, clean.send, (checked, asApplied) => {
+      reads.push([checked.length, asApplied]);
+      return Promise.resolve(true);
+    });
+    assert.deepStrictEqual(clean.sent, ["remove:old", "add:new", "remove:other"]);
+    assert.strictEqual(done.ok, true);
+    assert.strictEqual(done.matches, true);
+    assert.deepStrictEqual(reads, [[3, true]], "read back once, as applied");
+
+    const refusal = { [STATUS_KEY]: 200, notification: [{ description: "Nem tervezhető." }] };
+    const broken = scripted([okAnswer, refusal]);
+    const failed = await suggest.applySteps(steps, broken.send, (checked, asApplied) => {
+      assert.deepStrictEqual(
+        checked.map(step => step.courseId),
+        ["old", "new"],
+        "the refused step is checked too: it may have happened"
+      );
+      assert.strictEqual(asApplied, false);
+      return Promise.resolve(true);
+    });
+    assert.deepStrictEqual(
+      broken.sent,
+      ["remove:old", "add:new", "add:old"],
+      "stops at the refusal, then undoes what went through"
+    );
+    assert.strictEqual(failed.ok, false);
+    assert.strictEqual(failed.failure.message, "Nem tervezhető.");
+    assert.strictEqual(failed.restored, true);
+  };
+  const previousRun = module.exports.run;
+  module.exports.run = () => Promise.resolve(previousRun && previousRun()).then(check);
+}

@@ -48,9 +48,11 @@ function readAuthClaims(header) {
 // Whether a page request tells us something about the session. Not every API call
 // carries Authorization: on load the page sends General/GetHWebErrorReporting...
 // without one (measured), and taking that for a logout wiped the Neptun code the
-// UserInfo had just delivered. Only Account/* calls go header-less on purpose.
+// UserInfo had just delivered. Measured on unideb: the one header-less call that
+// means a session boundary is the login's Account/Authenticate; logout sends no
+// request at all and shows only as the /login route (index.js).
 function isAuthSignal(endpoint, header) {
-  return Boolean(normaliseAuth(header)) || /^Account\//.test(endpoint || "");
+  return Boolean(normaliseAuth(header)) || endpoint === "Account/Authenticate";
 }
 
 // Whether a header change may mean somebody else. A new token of the same session

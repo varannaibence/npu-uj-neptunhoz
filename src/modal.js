@@ -105,10 +105,17 @@ function injectCss() {
 /* The native classes provide the surface, title, content and action styling. These
    are supplemented only where the component's scoped layout rules cannot reach a
    userscript-created node. */
+/* !important: once Neptun has opened a small dialog of its own, its global
+   basic-dialog-container rules narrow ours into a card inside a wider white surface. */
 .${DIALOG_CLASS} {
   position: relative; display: flex; flex-direction: column;
-  width: 100%; box-sizing: border-box; max-height: calc(100vh - 40px);
+  width: 100% !important; max-width: none !important; margin: 0 !important;
+  box-sizing: border-box; max-height: calc(100vh - 40px);
 }
+.${OVERLAY_CLASS} .cdk-overlay-pane.npu-dialog-small { max-width: min(560px, 94vw); }
+.${OVERLAY_CLASS} .npu-dialog-small .basic-dialog-title,
+.${OVERLAY_CLASS} .npu-dialog-small .basic-dialog-content,
+.${OVERLAY_CLASS} .npu-dialog-small .mat-mdc-dialog-actions { padding-left: 40px; padding-right: 40px; }
 .${DIALOG_CLASS} .basic-dialog-wrapper {
   position: relative; display: flex; flex: 1 1 auto; flex-direction: column;
   min-height: 0; overflow: hidden;
@@ -232,7 +239,8 @@ function open(options) {
   const wrapper = document.createElement("div");
   wrapper.className = "cdk-global-overlay-wrapper";
   const pane = document.createElement("div");
-  pane.className = "cdk-overlay-pane";
+  // `small`: a short confirmation, not a 1040px workspace.
+  pane.className = `cdk-overlay-pane${options.small ? " npu-dialog-small" : ""}`;
   const container = document.createElement("div");
   container.className = `mat-mdc-dialog-container mdc-dialog cdk-dialog-container${
     options.actions && options.actions.length ? " mat-mdc-dialog-container-with-actions" : ""

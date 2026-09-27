@@ -126,6 +126,11 @@ anonymousXhr.send();
 assert.strictEqual(observedAuthLoss, undefined, "an anonymous page call leaves the session alone");
 assert.strictEqual(interceptor.getAuthHeader(), "Bearer next-token");
 assert.strictEqual(interceptor.isAuthSignal("Account/Authenticate", null), true);
+assert.strictEqual(
+  interceptor.isAuthSignal("Account/SomethingUnmeasured", null),
+  false,
+  "only the measured login call is a header-less boundary"
+);
 assert.strictEqual(interceptor.isAuthSignal("General/GetHWebErrorReportingEmailSystemParameter", null), false);
 assert.strictEqual(interceptor.isAuthSignal("UserInfo", "Bearer x"), true);
 const noAuthXhr = new fakeWindow.XMLHttpRequest();

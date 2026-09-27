@@ -799,6 +799,7 @@ function describeOp(op) {
 function confirmApply(state, variant, ops, rajtoloChanges) {
   modal.open({
     title: "Javaslat alkalmazása",
+    small: true,
     build(content) {
       const intro = document.createElement("p");
       intro.textContent = "A Neptun Tervezőjében (a szerveren) ezek változnak:";
@@ -827,8 +828,13 @@ function confirmApply(state, variant, ops, rajtoloChanges) {
   });
 }
 
-// Sequential, stopping at the first refusal.
-function runSteps(steps) {
+// One planner step against Neptun.
+function liveStep(step) {
+  return (step.kind === "add" ? liveSchedule : liveUnschedule)(step.record, step.courseId);
+}
+
+// Sequential, stopping at the first refusal. `send` makes one step's request.
+function runSteps(steps, send = liveStep) {
   const done = [];
   return steps
     .reduce(
@@ -837,8 +843,7 @@ function runSteps(steps) {
           if (failure) {
             return failure;
           }
-          const request = step.kind === "add" ? liveSchedule : liveUnschedule;
-          return request(step.record, step.courseId).then(json => {
+          return send(step).then(json => {
             const answer = plannerAnswer(json, STATUS_KEY);
             if (answer.ok) {
               done.push(step);
@@ -850,6 +855,18 @@ function runSteps(steps) {
       Promise.resolve(null)
     )
     .then(failure => ({ done, failure }));
+}
+
+// All or nothing, judged by the planner read back rather than by the answers: a
+// refused step may still have happened (a timeout says nothing). `readBack(steps,
+// applied)` re-reads the planner and says whether it shows them applied or not.
+async function applySteps(steps, send, readBack) {
+  const { done, failure } = await runSteps(steps, send);
+  if (!failure) {
+    return { ok: true, done, matches: await readBack(done, true) };
+  }
+  await runSteps(inverseSteps(done), send);
+  return { ok: false, done, failure, restored: await readBack(done.concat(failure.step), false) };
 }
 
 // Whether the planner, read back from Neptun, is in the state after the steps
@@ -897,20 +914,16 @@ function runApply(state, variant, ops, rajtoloChanges) {
         setStatus(state, "A Neptun nem adott friss munkamenetet; kattints valahova a Neptunban, majd próbáld újra.");
         return undefined;
       }
-      return runSteps(steps).then(({ done, failure }) => {
-        if (failure) {
-          // The refused step may still have happened (a timeout says nothing), so the
-          // verdict comes from the planner read back, not from the answers.
-          const attempted = done.concat(failure.step);
-          return runSteps(inverseSteps(done))
-            .then(() => registrationData.refreshPlanner())
-            .then(() =>
-              report(
-                plannerMatches(attempted, false)
-                  ? `A Tervező nem módosult: ${failure.message}`
-                  : `A Tervező módosítása megszakadt (${failure.message}), és a Tervező most eltér az eredetitől; nézd meg a Tervezőt.`
-              )
-            );
+      const readBack = (checked, applied) =>
+        registrationData.refreshPlanner().then(() => plannerMatches(checked, applied));
+      return applySteps(steps, liveStep, readBack).then(outcome => {
+        if (!outcome.ok) {
+          report(
+            outcome.restored
+              ? `A Tervező nem módosult: ${outcome.failure.message}`
+              : `A Tervező módosítása megszakadt (${outcome.failure.message}), és a Tervező most eltér az eredetitől; nézd meg a Tervezőt.`
+          );
+          return;
         }
         const saved = rajtoloChanges ? touchedRankings(state.plan, variant, info) : [];
         if (rajtoloChanges && utils.getNeptunCode() === code && state.plan.termId === termId) {
@@ -919,17 +932,13 @@ function runApply(state, variant, ops, rajtoloChanges) {
           ui.render(state);
         }
         if (generation === view.generation) {
-          view.undo = { code, termId, saved, steps: done };
+          view.undo = { code, termId, saved, steps: outcome.done };
         }
-        return registrationData
-          .refreshPlanner()
-          .then(() =>
-            report(
-              plannerMatches(done, true)
-                ? `A Tervező frissült${rajtoloChanges ? ", és a Rajtoló sorrendje is" : ""}. A rács az oldal újratöltése után mutatja.`
-                : "A Neptun elfogadta a módosítást, de a visszaolvasott Tervező eltér; nézd meg a Tervezőt."
-            )
-          );
+        report(
+          outcome.matches
+            ? `A Tervező frissült${rajtoloChanges ? ", és a Rajtoló sorrendje is" : ""}. A rács az oldal újratöltése után mutatja.`
+            : "A Neptun elfogadta a módosítást, de a visszaolvasott Tervező eltér; nézd meg a Tervezőt."
+        );
       });
     })
     .catch(() => report("A Tervező módosítása nem sikerült; nézd meg a Tervezőt."));
@@ -1329,6 +1338,8 @@ module.exports = {
   plannerSteps,
   inverseSteps,
   plannerAnswer,
+  runSteps,
+  applySteps,
   isOptimal,
   headline,
   summaryText,

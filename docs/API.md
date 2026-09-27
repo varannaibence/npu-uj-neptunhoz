@@ -350,6 +350,13 @@ válasza `202 Accepted` és `isTwoFactorRequired: true`, majd a 2FA-lépés utá
 teljesül a munkamenet. A válasz `neptunCode` és `sessionTimeoutInMinutes`
 mezője a kód számára releváns lehet.
 
+Mért ki- és bejelentkezés (unideb, 2026-09-27): a **kijelentkezés nem küld API-kérést**
+(sem XHR, sem fetch), csak a `/login` útvonalra vált. A belépés fejléc nélküli
+kérései: `General/Institute`, majd `Account/Authenticate` (`202`, a 2FA után még
+egyszer `200`). Az NPU ezért a kijelentkezést a `/login` útvonalból, az új
+munkamenetet az `Account/Authenticate`-ből ismeri fel; más fejléc nélküli
+`Account/*` hívást nem vesz munkamenet-határnak.
+
 Az `autoLogin` v3-ból szándékosan kimarad 2FA, karbantarthatóság és a jelszó
 helyi tárolásának biztonsági kockázata miatt. Ez az endpoint tehát katalógusba
 vett mérés, nem v3-funkció.
