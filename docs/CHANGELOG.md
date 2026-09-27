@@ -2,6 +2,8 @@
 
 ## Következő kiadás
 
+## 3.1.0 — 2026. szept. 27.
+
 **Rajtoló**
 
 - Ha a Neptun egy kérésnél a lejárt token miatt 401-et ad, a Rajtoló friss

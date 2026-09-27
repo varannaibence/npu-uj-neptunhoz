@@ -148,6 +148,128 @@ A legutóbbi három stabil kiadás. A **Telepítés** link Tampermonkey mellett
 közvetlenül telepíthető.
 
 <details open>
+<summary><strong>v3.1.0</strong> · 2026. szept. 27.</summary>
+
+**Rajtoló**
+
+- Ha a Neptun egy kérésnél a lejárt token miatt 401-et ad, a Rajtoló friss
+  tokent kér a Neptuntól, és a kérést egyszer újraküldi; eddig ez leállította a
+  futást. Időtúllépéses kérést továbbra sem küld újra.
+- A Leállítás tokenfrissítés közben is érvényes: ami a frissítésre várt, már nem
+  megy ki. Ugyanez áll, ha közben más felhasználó lép be.
+- Olyan egyetemen, ahol a token nem hordoz munkamenet-azonosítót, a futás már nem
+  áll le minden tokenfrissítéskor.
+- Beküldés után a Rajtoló egyszer újra lekéri a tárgy kurzuslistáját, és a
+  Neptun saját állapotmezői alapján „Felvéve” vagy „Várólistára került”
+  eredményt mutat. Ha ez nem dönthető el, „Beküldve” marad, és a futás ettől
+  nem áll le.
+- Javítva: a tervező csak az első tárgy kurzusadatait töltötte be, a többinél
+  a „Kurzusadat betöltése…” felirat és az ütközésjelzés nem frissült.
+- Javítva: a kurzusok sorrendjét állító ▲/▼ gombok a kurzusadatok betöltése
+  után nem mentették az új sorrendet.
+- Az időpontokat magyar idő szerint értelmezi akkor is, ha a böngésző más
+  időzónában van; eddig ilyenkor egy vagy több órával később indult volna.
+- Az időszakválasztó a folyamatban lévő vagy következő időszakot jelöli ki
+  alapból, nem a lista elsőjét, ami gyakran már lezárult.
+- A visszaszámláló egy napnál hosszabb várakozásnál napokat is mutat.
+- Javítva: a „Rajtolóhoz” kapcsoló „A felhasználó azonosítása még nem készült
+  el” hibát adott, és a terv nem volt menthető. Két ok volt. Az oldal betöltéskor
+  küld egy bejelentkezés nélküli kérést, és az NPU ezt kijelentkezésnek vette.
+  A Neptun 5 percenként új tokent kér, és ezt az NPU felhasználóváltásnak vette,
+  ami a futó Rajtolót is leállította („Új munkamenet érzékelve”). Most csak a
+  kijelentkezés vagy egy másik bejelentkezés számít váltásnak.
+- Javítva: a „Rajtolóhoz” kapcsoló minden váltáskor „A Rajtoló terve nem
+  menthető” hibát jelzett, pedig a terv elmentődött. A Tampermonkey mentése nem
+  ad vissza értéket, és az NPU ezt sikertelenségnek olvasta.
+- Elindítás után a Rajtoló életben tartja a munkamenetet, és a nyitás előtt
+  friss tokent kér. Mindkettőhöz a Neptun saját „Tárgy keresése” gombját nyomja
+  meg, így a Neptun maga frissít. Hosszú futás közben is megújítja a lejárt
+  tokent, mielőtt a kérés elakadna.
+- Háttérben lévő fülön a Chrome percenként egyszer futtatja a láncolt
+  időzítőket, ezért az indulás akár egy percet is késhetett. Most egyetlen
+  időzítő indítja a futást.
+- Javítva: ha a visszaszámlálás alatt leállítottad a futást, a státusz
+  „Leállítás folyamatban…” állapotban ragadt.
+- A visszaszámlálás a böngészőfül címében is látszik. Ha a futás háttérben ér
+  véget, a fül címe **✔ Rajtoló kész** lesz, amíg meg nem nézed.
+
+**Új**
+
+- Órarendjavaslatok: az Órarendtervező új **Javaslatok** gombja a felvett órák
+  mellé ütközésmentes kurzusválasztást keres a Rajtolóban és a Neptun
+  Tervezőjében kiválasztott csoportokhoz. Három változatot ad (kevesebb lyukas
+  óra, több szabad nap, legkevesebb csere), a heti rácson előnézetben mutatja,
+  és figyelmeztet a betelt, várólistás, rangsoros és időpont nélküli
+  kurzusokra. Az **Alkalmazás** előbb felsorolja a változásokat, majd a Neptun
+  Tervezőjében a javasolt kurzusokra cseréli a tervezetteket, és a Rajtoló
+  sorrendjét is átrendezi. Ha a Neptun egy lépést elutasít, az addigiakat
+  visszagörgeti; a panelen visszavonható. Ha egy már felvett kurzus típusából (például laborból)
+  teszel egy másikat a Tervezőbe, cserének veszi, és megmondja, megéri-e
+  cserélni. Ha a terved már a legjobb, ezt mondja, és nem ajánl átírást. A Rajtoló
+  sorrendjének módosítása is megerősítést kér, és külön jelzi, ha egy kurzus eddig
+  nem volt a sorrendedben. Ha a Tervező nem olvasható vissza, ezt mondja ki, nem
+  állítja, hogy nem módosult. A
+  javaslat egy keskeny sávban jelenik meg a naptár fölött, a részletek
+  lenyithatók. A számolás előtt mindig frissen újraolvassa a Tervezőt, lejárt
+  munkamenetnél pedig előbb a Neptunnal frissítteti.
+- Egységes jelölés: az NPU által az oldalra tett minden gomb és kapcsoló (a
+  Rajtoló, a „Rajtolóhoz” kapcsoló, a „Betelt kurzusok hátra”, az
+  Átlagkalkulátor és a Javaslatok) az NPU ikonjával és „NPU-funkció” súgóval
+  jelenik meg, hogy ne lehessen a Neptun sajátjával összekeverni. A Rajtoló
+  gombján ezért nincs már „(NPU)” felirat.
+- Mi van ma?: a kezdőlapon a „Tisztelt …!” köszöntés helyett, a Neptun saját
+  kártyáival egyező három kártyán látszanak a mai órák teremmel (vagy a következő, ha ma nincs), a befizetési határidők és
+  a futó vagy közelgő tárgyfelvételi időszakok. Ha egy befizetés vagy időszak 3
+  napon belül esedékes, naponta egyszer értesítés jelzi bármelyik oldalon.
+- Átlagkalkulátor: a Felvett tárgyak oldalon a várt jegyekből kiszámolja a félév
+  súlyozott átlagát, kreditindexét és korrigált kreditindexét. Előbb egy lezárt
+  féléven ellenőrzi, hogy az NPU képlete egyezik-e a Neptun saját értékeivel; ha
+  nem, nem mutat számot.
+
+**Egyéb**
+
+- A beállítások panel minden funkciónál és alopciónál kiírja, hol található a
+  Neptunban (például „Hol: Tárgyak › Tárgyfelvétel: a lenyitott tárgy
+  kurzusainál”); a README táblázatai is kaptak egy **Hol található** oszlopot.
+- Táblázatos kurzuslista: öt átláthatóbb oszlop (az állapot a kód mellett, nap-chip
+  és terem az időpontnál, telítettségi sáv a létszám alatt, az ütköző tárgy neve),
+  a felvett és a felvehető sorok színes szegélyt kapnak, a betelt és ütköző sorok
+  halványabbak, a szakaszcímek számláló chipeket.
+- Az NPU saját ablakai akkor is kitöltik a helyüket, ha előtte a Neptun egy kis
+  ablaka nyílt meg; a rövid megerősítések keskenyebb ablakban jelennek meg.
+- Javítva: bejelentkezés után az első kérés törölte a Neptun-kódot, ezért a
+  Rajtoló terve, a „Mi van ma?” kártyái és a napi értesítés nem működtek az oldal
+  újratöltéséig.
+- A Munkamenet életben tartása akkor is közbelép, ha a legutóbbi tokenfrissítés
+  10 percnél régebbi; a 12,5 perces tétlenség önmagában sokszor túl későn jött.
+- Az átlagkalkulátor képletellenőrzése nem függ a félév feliratától, és teljesített
+  kredit nélküli félévet nem fogad el bizonyítéknak.
+- Beállítások: a kapcsolók a README-vel egyező csoportokban jelennek meg
+  (Tárgyfelvétel, Rajtoló, Mindennapok, Megjelenés és kényelem). A „Mi van ma?”
+  Befizetendő és Időszakok kártyája, valamint a napi értesítés külön
+  kapcsolható.
+
+- Munkamenet életben tartása: már tétlen fülnél is működik, de csak a
+  tárgyfelvételi oldalon. Nem küld saját frissítő kérést: 12,5 perc tétlenség
+  után, vagy ha a legutóbbi tokenfrissítés 10 percnél régebbi, röviddel a
+  kiléptetés előtt megnyomja a Neptun „Tárgy keresése” gombját,
+  és a Neptun maga frissít. Ettől a tárgylista újratöltődik; aki közben
+  kattintgat, annál nem nyom, de aki csak olvas, annál előfordulhat. A régi
+  módszer nem
+  állította vissza a Neptun kiléptetési számlálóját, és ha egyszerre futott a
+  Neptun saját frissítésével, a munkamenet elveszhetett.
+
+- Beállítások: a csak színtémát érintő mentés nem tölti újra az oldalt, és
+  változtatás nélkül a gomb egyszerűen bezárja a panelt.
+- Javítva: a Neptun ötpercenkénti tokenfrissítésekor eltűntek az
+  ütközésjelzések, és az NPU újra lekérte a felvett kurzusokat.
+- Táblázatos kurzuslista: bekapcsolt szűrő mellett minden újrarajzolás
+  áthelyezte a sorokat, ami a billentyűzetfókuszt is elvihette. Javítva.
+
+[Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.1.0) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.1.0/npu.user.js)
+
+</details>
+<details>
 <summary><strong>v3.0.4</strong> · 2026. szept. 26.</summary>
 
 - Frissítés jelzése: amikor a Tampermonkey frissíti az NPU-t, a következő
@@ -167,20 +289,6 @@ közvetlenül telepíthető.
   az NPU most a kurzuslista kéréséből pótolja.
 
 [Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.0.3) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.0.3/npu.user.js)
-
-</details>
-<details>
-<summary><strong>v3.0.2</strong> · 2026. szept. 23.</summary>
-
-- A színtéma a fejléc jobb felső sarkában lévő üzenetszámlálót is átszínezi: a
-  menta helyett a választott szín világos árnyalatát kapja.
-- A Neptun halványkék felületei (kezdőlapi sáv, felhasználói gomb, kiemelések,
-  linkkék) is a választott színárnyalatot veszik fel, a saját világosságukat
-  megtartva. A férőhely-jelvények színei nem változnak.
-- Saját NPU-logó: a láblécben és a bejelentkező oldalon a felirat előtt, a
-  README fejlécében és a Tampermonkey-listában is.
-
-[Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.0.2) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.0.2/npu.user.js)
 
 </details>
 
