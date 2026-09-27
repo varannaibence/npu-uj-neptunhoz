@@ -19,8 +19,16 @@ assert.strictEqual(updateNotice.shouldAnnounce("garbage", "3.0.3"), false, "unre
 
 assert.strictEqual(updateNotice.noticeText("3.0.3"), "Neptun PowerUp! frissült: v3.0.3.");
 assert.strictEqual(
-  updateNotice.releaseUrl("3.0.3"),
-  "https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.0.3",
-  "the link opens that version's release notes"
+  updateNotice.changelogUrl("3.0.3"),
+  "https://github.com/varannaibence/npu-uj-neptunhoz/blob/master/docs/CHANGELOG.md#v3.0.3",
+  "the link opens that version's section of the changelog"
 );
+{
+  const { promoteNextRelease } = require("../tools/sync-releases");
+  const anchor = updateNotice.changelogUrl("3.0.3").split("#")[1];
+  assert.ok(
+    promoteNextRelease("## Következő kiadás\n\n- x\n", "3.0.3", "ma").includes(`<a name="${anchor}"></a>`),
+    "the release workflow writes exactly the anchor the notice links to"
+  );
+}
 assert.strictEqual(updateNotice.meta.id, "updateNotice");

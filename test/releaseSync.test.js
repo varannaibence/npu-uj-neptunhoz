@@ -58,8 +58,8 @@ const pending =
 const promoted = promoteNextRelease(pending, "v3.0.3", "2026. szept. 26.");
 assert.strictEqual(
   promoted,
-  "# Változásnapló\n\n## Következő kiadás\n\n## 3.0.3 — 2026. szept. 26.\n\n- Rajtoló javítás\n\n## 3.0.2 — 2026. szept. 23.\n\n- Logó\n",
-  "the pending notes move under the new version, with an empty section left above"
+  '# Változásnapló\n\n## Következő kiadás\n\n## 3.0.3 — 2026. szept. 26. <a name="v3.0.3"></a>\n\n- Rajtoló javítás\n\n## 3.0.2 — 2026. szept. 23.\n\n- Logó\n',
+  "the pending notes move under the new version, anchored for the update notice, with an empty section left above"
 );
 assert.strictEqual(changelogNotes(promoted, "v3.0.3"), "- Rajtoló javítás", "the README sync then finds them");
 assert.strictEqual(changelogNotes(promoted, "v3.0.2"), "- Logó", "the previous release keeps its own notes");
@@ -75,6 +75,6 @@ assert.strictEqual(
 );
 assert.strictEqual(
   promoteNextRelease("## Következő kiadás\n\n- Utolsó\n", "1.0.0", "ma"),
-  "## Következő kiadás\n\n## 1.0.0 — ma\n\n- Utolsó\n\n",
+  '## Következő kiadás\n\n## 1.0.0 — ma <a name="v1.0.0"></a>\n\n- Utolsó\n\n',
   "a pending section at the end of the file is promoted too"
 );

@@ -57,8 +57,9 @@ const NEXT_HEADING = /^##\s+Következő kiadás[^\n]*$/im;
 
 // The changelog is written under "## Következő kiadás" between releases. At release
 // time that section becomes the version's own, with a fresh empty one above it, so
-// changelogNotes finds it. Unchanged when the version already has a section or there
-// is nothing waiting to be released.
+// changelogNotes finds it. The heading carries a `v<version>` anchor (GitHub's
+// documented custom anchor), which the update notice links to. Unchanged when the
+// version already has a section or there is nothing waiting to be released.
 function promoteNextRelease(changelog, version, date) {
   const plain = String(version).replace(/^v/i, "");
   const existing = new RegExp(`^##\\s+v?${escapeRegExp(plain)}(?:\\s|$)`, "im");
@@ -74,7 +75,7 @@ function promoteNextRelease(changelog, version, date) {
   if (!notes) {
     return changelog;
   }
-  const promoted = `${match[0]}\n\n## ${plain} — ${date}\n\n${notes}\n\n`;
+  const promoted = `${match[0]}\n\n## ${plain} — ${date} <a name="v${plain}"></a>\n\n${notes}\n\n`;
   return `${changelog.slice(0, match.index)}${promoted}${changelog.slice(bodyEnd)}`;
 }
 

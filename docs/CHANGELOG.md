@@ -2,7 +2,11 @@
 
 ## Következő kiadás
 
-## 3.1.1 — 2026. szept. 27.
+- Frissítés jelzése: az „Újdonságok” link a változásnaplóban az új verzió
+  teljes leírására visz; eddig a GitHub release-oldalára, ahol csak a
+  beolvasztott PR-ek listája látszott.
+
+## 3.1.1 — 2026. szept. 27. <a name="v3.1.1"></a>
 
 **Órarendjavaslatok**
 
@@ -36,7 +40,7 @@
 - Mi van ma?: a határidő nélküli befizetendő tétel is megjelenik („határidő
   nélkül”); eddig kimaradt, és a kártya azt írhatta, hogy nincs befizetendő tétel.
 
-## 3.1.0 — 2026. szept. 27.
+## 3.1.0 — 2026. szept. 27. <a name="v3.1.0"></a>
 
 **Rajtoló**
 
@@ -154,7 +158,7 @@
 - Táblázatos kurzuslista: bekapcsolt szűrő mellett minden újrarajzolás
   áthelyezte a sorokat, ami a billentyűzetfókuszt is elvihette. Javítva.
 
-## 3.0.4 — 2026. szept. 26.
+## 3.0.4 — 2026. szept. 26. <a name="v3.0.4"></a>
 
 - Frissítés jelzése: amikor a Tampermonkey frissíti az NPU-t, a következő
   betöltéskor egy értesítés jelzi az új verziót, az „Újdonságok” linkkel. Csak
@@ -162,13 +166,13 @@
 - A frissítési és hibabejelentő linkek az új repócímre (`npu-uj-neptunhoz`)
   mutatnak; eddig a régi cím átirányítása miatt működtek.
 
-## 3.0.3 — 2026. szept. 26.
+## 3.0.3 — 2026. szept. 26. <a name="v3.0.3"></a>
 
 - Rajtoló: javítva, hogy egyes egyetemek Neptunján (pl. ME) a kurzus Rajtolóhoz
   adásakor „A Rajtoló terve nem menthető” hibát kaptál. A hiányzó félév-azonosítót
   az NPU most a kurzuslista kéréséből pótolja.
 
-## 3.0.2 — 2026. szept. 23.
+## 3.0.2 — 2026. szept. 23. <a name="v3.0.2"></a>
 
 - A színtéma a fejléc jobb felső sarkában lévő üzenetszámlálót is átszínezi: a
   menta helyett a választott szín világos árnyalatát kapja.
@@ -178,7 +182,7 @@
 - Saját NPU-logó: a láblécben és a bejelentkező oldalon a felirat előtt, a
   README fejlécében és a Tampermonkey-listában is.
 
-## 3.0.1 — 2026. szept. 23.
+## 3.0.1 — 2026. szept. 23. <a name="v3.0.1"></a>
 
 **Megjelenés**
 
@@ -203,7 +207,7 @@
 - A kiadás verzióját a tag adja; a GitHub felületén létrehozott release elég,
   a `package.json` utána automatikusan igazodik.
 
-## 3.0.0 — 2026. szept. 20.
+## 3.0.0 — 2026. szept. 20. <a name="v3.0.0"></a>
 
 Az első v3-fejlesztési kiadás az új, Angular-alapú Neptun-felülethez. A v3 külön
 kódra épül; a régi WebForms-modulok nem részei ennek a verziónak.
