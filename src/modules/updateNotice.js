@@ -5,7 +5,9 @@ const storage = require("../storage");
 const { showToast } = require("../toast");
 
 const LAST_SEEN_KEY = "lastSeenScriptVersion";
-const RELEASES_URL = "https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/";
+// Every change of a version is written up in the changelog, under a heading the
+// release workflow anchors as `v<version>`; the GitHub release page only lists PRs.
+const CHANGELOG_URL = "https://github.com/varannaibence/npu-uj-neptunhoz/blob/master/docs/CHANGELOG.md";
 // Long enough to notice on a page that is still loading; closable any time.
 const NOTICE_MS = 15000;
 
@@ -15,7 +17,7 @@ const meta = {
   group: "comfort",
   name: "Frissítés jelzése",
   where: "Frissítés utáni első betöltéskor, felugró értesítésben",
-  description: "Frissítés után egyszer jelzi az új verziót, az újdonságok linkjével.",
+  description: "Frissítés után egyszer jelzi az új verziót, a változásnapló linkjével.",
 };
 
 function shouldActivate() {
@@ -52,8 +54,9 @@ function noticeText(version) {
   return `Neptun PowerUp! frissült: v${version}.`;
 }
 
-function releaseUrl(version) {
-  return `${RELEASES_URL}v${encodeURIComponent(version)}`;
+// Without the anchor (an older heading) the changelog still opens, newest first.
+function changelogUrl(version) {
+  return `${CHANGELOG_URL}#v${encodeURIComponent(version)}`;
 }
 
 function whenBodyReady(fn) {
@@ -80,7 +83,7 @@ function initialize() {
       if (shouldAnnounce(lastSeen, current)) {
         whenBodyReady(() =>
           showToast(noticeText(current), "ok", {
-            link: { href: releaseUrl(current), label: "Újdonságok" },
+            link: { href: changelogUrl(current), label: "Újdonságok" },
             durationMs: NOTICE_MS,
           })
         );
@@ -99,5 +102,5 @@ module.exports = {
   isNewer,
   shouldAnnounce,
   noticeText,
-  releaseUrl,
+  changelogUrl,
 };
