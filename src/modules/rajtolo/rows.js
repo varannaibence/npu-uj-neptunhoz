@@ -115,6 +115,12 @@ function decorateCourseRows(state) {
     const customRow = findCustomCourseRow(hit.course.code);
     const customActions = customRow && customRow.querySelector(TABLE_ACTIONS_SELECTOR);
     let toggle = row.querySelector(`[${ROW_FLAG}]`) || (customRow && customRow.querySelector(`[${ROW_FLAG}]`));
+    // Its click handler holds the course it was built for: a row now showing another
+    // course gets a fresh one.
+    if (toggle && toggle.getAttribute(ROW_FLAG) !== hit.course.id) {
+      toggle.remove();
+      toggle = null;
+    }
     if (!toggle) {
       const sourceRow = customRow || row;
       const slider = sourceRow.querySelector(SLIDER_SELECTOR) || row.querySelector(SLIDER_SELECTOR);
@@ -133,6 +139,12 @@ function decorateCourseRows(state) {
         }
         if (!utils.getNeptunCode()) {
           showToast("A felhasználó azonosítása még nem készült el. Próbáld újra egy pillanat múlva.", "error");
+          return;
+        }
+        // An armed run sends the plan it was started with: a change now would not
+        // reach it, so it is refused rather than shown as done.
+        if (state.running) {
+          showToast("A Rajtoló fut; a terv csak leállítás után módosítható.", "error");
           return;
         }
         state.plan = toggleCourseInPlan(state.plan, record, hit.course);

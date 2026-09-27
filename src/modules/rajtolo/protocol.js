@@ -19,9 +19,12 @@ function classifyResponse(body) {
     !Array.isArray(body.notification) ||
     !Object.prototype.hasOwnProperty.call(body, "data")
   ) {
+    // httpRequest's own failures (timeout, network, no login) carry their reason: a
+    // timed-out POST must say the registration may have gone through.
+    const own = body && Array.isArray(body.notification) && body.notification.find(n => n && n.description);
     return {
       kind: "unknown",
-      message: "Érvénytelen vagy ismeretlen szerverválasz.",
+      message: own ? own.description : "Érvénytelen vagy ismeretlen szerverválasz.",
     };
   }
   const errors = body.notification.filter(n => n && n.type === 3);

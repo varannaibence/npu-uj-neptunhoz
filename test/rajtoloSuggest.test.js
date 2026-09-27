@@ -286,6 +286,62 @@ assert.deepStrictEqual(suggest.plannerAnswer(null, "s"), { ok: false, message: "
   assert.deepStrictEqual(withPlanner[0].groups[1].ranking, ["s1g2", "s1g1"], "the Rajtoló ranking stays its own");
 }
 
+// Regression (external review): the lecture in the Rajtoló, the lab only in Neptun's
+// planner - the lab still joins the week, so a clash between them is never hidden.
+{
+  const lec = course("mlec", "SM", "LEC", "Előadás", [slot(2, "08:00", "10:00")]);
+  const lab = course("mlab", "SM", "LAB", "Labor", [slot(2, "09:00", "11:00")]);
+  const mixedPlan = {
+    termId: "t",
+    subjects: [
+      Object.assign({ subjectId: "SM", title: "Vegyes" }, ids, {
+        groups: [{ type: "Előadás", typeId: "LEC", ranking: ["mlec"] }],
+      }),
+    ],
+  };
+  const mixedBaseline = [
+    { source: "planned", origin: "planner", course: lab, subject: Object.assign({ title: "Vegyes" }, ids) },
+  ];
+  const mixedTargets = suggest.planTargets(mixedPlan, mixedBaseline);
+  assert.deepStrictEqual(
+    mixedTargets[0].groups.map(g => `${g.typeId}:${g.ranking.join(",")}:${g.planned.join(",")}:${g.fromPlan}`),
+    ["LEC:mlec::true", "LAB:mlab:mlab:false"]
+  );
+  const mixed = suggest.solverInput(
+    mixedTargets,
+    new Map([
+      [
+        "SM",
+        new Map([
+          [lec.id, lec],
+          [lab.id, lab],
+        ]),
+      ],
+    ]),
+    mixedBaseline
+  );
+  assert.strictEqual(mixed.info.get("SM|LAB").fromPlan, false, "the planner-only lab is no Rajtoló change");
+  const [mixedVariant] = suggestSchedules(mixed.input).variants;
+  assert.strictEqual(mixedVariant.complete, false, "the clashing lecture and lab are never called clash-free");
+
+  // A group saved without a type id takes its label's planner course, not a twin group.
+  const legacyTargets = suggest.planTargets(
+    {
+      termId: "t",
+      subjects: [
+        Object.assign({ subjectId: "SM", title: "Vegyes" }, ids, {
+          groups: [{ type: "Labor", typeId: null, ranking: ["old"] }],
+        }),
+      ],
+    },
+    mixedBaseline
+  );
+  assert.deepStrictEqual(
+    legacyTargets[0].groups.map(g => `${g.typeId}:${g.ranking.join(",")}:${g.planned.join(",")}`),
+    ["null:old:mlab"]
+  );
+}
+
 // Regression (branch review): the per-subject list is not re-read after a planner
 // write, so a removed course may linger there. Only the planner endpoint's own rows
 // count as planned, and the lingering one never reaches the next Apply.

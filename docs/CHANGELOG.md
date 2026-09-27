@@ -2,6 +2,38 @@
 
 ## Következő kiadás
 
+**Órarendjavaslatok**
+
+- Javítva: ha egy tárgy egyik kurzusa (például az előadás) a Rajtolóban, a
+  másik (például a labor) csak a Neptun Tervezőjében szerepelt, a labor kimaradt
+  a számításból, így egy valódi ütközést is ütközésmentesnek mutatott.
+- Ha egy csoport nem fér be ütközés nélkül, a javaslat nem alkalmazható: a
+  kimaradó csoport kurzusa a Tervezőben maradna, és ütközhetne az újakkal. Az
+  előnézet és a részletek továbbra is látszanak.
+- Ritkábban jelzi tévesen, hogy „A Neptun nem adott friss munkamenetet”, ha a
+  gép órája kicsit eltér a szerverétől.
+
+**Rajtoló**
+
+- Élesített vagy futó Rajtolónál a „Rajtolóhoz” kapcsoló nem módosítja a
+  tervet, hanem szól, hogy előbb állítsd le. Eddig a kapcsoló látszólag
+  kivette vagy hozzáadta a kurzust, a futás mégis az indításkori tervet
+  küldte be.
+- Ha egy beküldés időtúllépéssel ér véget, a státusz azt mondja: „A szerver nem
+  válaszolt időben. A jelentkezés állapota bizonytalan.” – eddig csak általános
+  hibaüzenet jelent meg. A kérést továbbra sem küldi újra.
+- Javítva: token-frissítés után a sikertelenül betöltött kurzusadatok
+  újratöltése elmaradhatott, ha közben másik betöltés futott.
+
+**Egyéb**
+
+- Férőhely: ha két tárgynak azonos a kurzuskódja (például „01”), ezeknél a
+  soroknál nem jelenik meg létszám, és a „Betelt kurzusok hátra” rendezés sem
+  mozgatja őket. Eddig az egyik tárgy kurzusa a másik tárgy létszámát és betelt
+  állapotát mutathatta.
+- Mi van ma?: a határidő nélküli befizetendő tétel is megjelenik („határidő
+  nélkül”); eddig kimaradt, és a kártya azt írhatta, hogy nincs befizetendő tétel.
+
 ## 3.1.0 — 2026. szept. 27.
 
 **Rajtoló**

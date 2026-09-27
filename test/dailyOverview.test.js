@@ -75,8 +75,9 @@ assert.deepStrictEqual(
     ["Lejárt", -1],
     ["Hamarosan", 2],
     ["Késő", 20],
+    ["Dátum nélkül", null],
   ],
-  "sorted by deadline; an item without one is left out"
+  "sorted by deadline; an item without one is kept, last, never dropped"
 );
 
 assert.deepStrictEqual(

@@ -231,7 +231,7 @@ const states = occupancy.collectCourseStates(courses);
 assert.strictEqual(states.get("TEST0315L-01-KIE").isFull, true);
 assert.deepStrictEqual(
   states.get("TEST0315G"),
-  { isFull: false, willBeOnWaitingList: null, registered: 4, limit: 30 },
+  { subjectId: null, isFull: false, willBeOnWaitingList: null, registered: 4, limit: 30 },
   "codes are case-normalised, and the headcount is recorded alongside the verdict"
 );
 assert.strictEqual(states.size, 3, "a row without a code is skipped");
@@ -240,12 +240,23 @@ occupancy.collectCourseStates({ data: [{ code: "test0208e", isFull: true }] }, s
 assert.strictEqual(states.get("TEST0208E").isFull, true, "later responses add to the map");
 // a response missing the counts must not invent them
 assert.deepStrictEqual(states.get("TEST0208E"), {
+  subjectId: null,
   isFull: true,
   willBeOnWaitingList: null,
   registered: null,
   limit: null,
 });
 assert.strictEqual(occupancy.collectCourseStates({}).size, 0, "an empty body must not throw");
+// a course code two subjects share is nobody's: no badge beats another subject's count
+{
+  const shared = occupancy.collectCourseStates({
+    data: [{ subjectId: "A", code: "01", isFull: false, registeredStudentsCount: 3, maxLimit: 30 }],
+  });
+  occupancy.collectCourseStates({ data: [{ subjectId: "B", code: "01", isFull: true }] }, shared);
+  occupancy.collectCourseStates({ data: [{ subjectId: "A", code: "01", isFull: false }] }, shared);
+  assert.strictEqual(shared.get("01"), null, "an ambiguous code stays ambiguous");
+  assert.strictEqual(occupancy.occupancyLabel(shared.get("01")), null);
+}
 
 // courses with room float up, full ones sink, each keeping their relative order
 const a = { row: "a", isFull: false };

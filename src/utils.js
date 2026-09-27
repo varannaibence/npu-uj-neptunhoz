@@ -240,40 +240,6 @@ function parseSubjectCode(source) {
   return null;
 }
 
-function isPassingGrade(str) {
-  return [
-    "jeles",
-    "excellent",
-    "jó",
-    "good",
-    "közepes",
-    "satisfactory",
-    "elégséges",
-    "pass",
-    "kiválóan megfelelt",
-    "excellent",
-    "megfelelt",
-    "average",
-  ].some(function (item) {
-    return str.toLowerCase().indexOf(item) !== -1;
-  });
-}
-
-function isFailingGrade(str) {
-  return [
-    "elégtelen",
-    "fail",
-    "nem felelt meg",
-    "unsatisfactory",
-    "nem jelent meg",
-    "did not attend",
-    "nem vizsgázott",
-    "did not attend",
-  ].some(function (item) {
-    return str.toLowerCase().indexOf(item) !== -1;
-  });
-}
-
 module.exports = {
   getNeptunCode,
   onNeptunCodeChange,
@@ -287,7 +253,5 @@ module.exports = {
   markNpu,
   runAsync,
   parseSubjectCode,
-  isPassingGrade,
-  isFailingGrade,
   getDomain,
 };

@@ -161,7 +161,8 @@ function plannedCourseIds(subject) {
 // injectable so the queue is testable without a network.
 function loadPlannedCourses(state, force, get = liveGet) {
   if (state.courseLoadQueue) {
-    return state.courseLoadQueue;
+    // A forced retry (a renewed token) runs after the walk in flight, not instead of it.
+    return force ? state.courseLoadQueue.then(() => loadPlannedCourses(state, true, get)) : state.courseLoadQueue;
   }
   const targets = state.plan.subjects.slice();
   const generation = state.courseCatalogGeneration;
