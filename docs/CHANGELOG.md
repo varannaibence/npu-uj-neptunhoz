@@ -2,6 +2,44 @@
 
 ## Következő kiadás
 
+**Rajtoló**
+
+- Javítva: ha az új félév tárgylistája üres volt, az előző félév terve
+  megmaradt, és a Rajtoló azzal elindítható volt.
+- Futás közbeni leállítás után a státusz „Leállítva”, nem „Kész”.
+- Ha egy tárgy rangsorolt kurzusát már felvetted, vagy várólistán vagy rá, a
+  Rajtoló kihagyja a tárgyat. Eddig a következő kurzust küldte be, ami
+  lecserélhette a már felvettet.
+- Egy csoporton belül a szabad helyes kurzus megelőzi a feljebb rangsorolt, de
+  csak várólistát adó kurzust; ha egyikben sincs hely, a várólista marad.
+- Élesített Rajtoló mellett más NPU-ablak (például a beállítások) nem nyílik
+  meg, mert a Rajtoló ablakának bezárása leállítaná a futást.
+- Másik felhasználó belépése után a kredit-előrejelzés nem mutatja az előző
+  felhasználó kreditjeit, félévváltás után pedig a másik félévét.
+
+**Órarendjavaslatok**
+
+- Alkalmazáskor a Rajtoló sorrendjéből kikerülnek a javaslattal ütköző
+  tartalék kurzusok; eddig a sor végén maradtak, így betelt első választásnál a
+  Rajtoló ütköző kurzusra jelentkezhetett. A megerősítés megnevezi őket, és
+  visszavonható.
+- Üres tárgylistájú új félévre váltáskor a javaslatok már nem a régi félév
+  Tervezőjéből számolnak, és nem azt módosítják.
+- Futó Rajtoló mellett az alkalmazás csak a Tervezőt módosítja, a Rajtoló
+  sorrendjét nem.
+
+**Egyéb**
+
+- Két nyitott Neptun-fülnél az egyik fül mentése már nem írja felül a másikban
+  mentett adatot, például a Rajtoló tervét.
+- Ha egy felvett vagy tervezett kurzusodnak nincs időpontja, az ütközésjelzés
+  „Nincs ismert ütközés” feliratot mutat, és megnevezi ezeket a kurzusokat.
+
+- Kilépés vagy másik bejelentkezés után egy késve érkező régi `UserInfo`
+  válasz már nem állítja vissza az előző Neptun-kódot.
+- Átlagkalkulátor: félévváltás után nem mutatja az előző félév tárgyait.
+- „Mi van ma?”: éjfél után nem mutat tegnapi adatot a gyorsítótárból.
+
 ## 3.1.2 — 2026. szept. 27. <a name="v3.1.2"></a>
 
 - Frissítés jelzése: az „Újdonságok” link a változásnaplóban az új verzió
