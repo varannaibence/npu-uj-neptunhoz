@@ -148,6 +148,44 @@ A legutóbbi három stabil kiadás. A **Telepítés** link Tampermonkey mellett
 közvetlenül telepíthető.
 
 <details open>
+<summary><strong>v3.1.1</strong> · 2026. szept. 27.</summary>
+
+**Órarendjavaslatok**
+
+- Javítva: ha egy tárgy egyik kurzusa (például az előadás) a Rajtolóban, a
+  másik (például a labor) csak a Neptun Tervezőjében szerepelt, a labor kimaradt
+  a számításból, így egy valódi ütközést is ütközésmentesnek mutatott.
+- Ha egy csoport nem fér be ütközés nélkül, a javaslat nem alkalmazható: a
+  kimaradó csoport kurzusa a Tervezőben maradna, és ütközhetne az újakkal. Az
+  előnézet és a részletek továbbra is látszanak.
+- Ritkábban jelzi tévesen, hogy „A Neptun nem adott friss munkamenetet”, ha a
+  gép órája kicsit eltér a szerverétől.
+
+**Rajtoló**
+
+- Élesített vagy futó Rajtolónál a „Rajtolóhoz” kapcsoló nem módosítja a
+  tervet, hanem szól, hogy előbb állítsd le. Eddig a kapcsoló látszólag
+  kivette vagy hozzáadta a kurzust, a futás mégis az indításkori tervet
+  küldte be.
+- Ha egy beküldés időtúllépéssel ér véget, a státusz azt mondja: „A szerver nem
+  válaszolt időben. A jelentkezés állapota bizonytalan.” – eddig csak általános
+  hibaüzenet jelent meg. A kérést továbbra sem küldi újra.
+- Javítva: token-frissítés után a sikertelenül betöltött kurzusadatok
+  újratöltése elmaradhatott, ha közben másik betöltés futott.
+
+**Egyéb**
+
+- Férőhely: ha két tárgynak azonos a kurzuskódja (például „01”), ezeknél a
+  soroknál nem jelenik meg létszám, és a „Betelt kurzusok hátra” rendezés sem
+  mozgatja őket. Eddig az egyik tárgy kurzusa a másik tárgy létszámát és betelt
+  állapotát mutathatta.
+- Mi van ma?: a határidő nélküli befizetendő tétel is megjelenik („határidő
+  nélkül”); eddig kimaradt, és a kártya azt írhatta, hogy nincs befizetendő tétel.
+
+[Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.1.1) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.1.1/npu.user.js)
+
+</details>
+<details>
 <summary><strong>v3.1.0</strong> · 2026. szept. 27.</summary>
 
 **Rajtoló**
@@ -279,16 +317,6 @@ közvetlenül telepíthető.
   mutatnak; eddig a régi cím átirányítása miatt működtek.
 
 [Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.0.4) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.0.4/npu.user.js)
-
-</details>
-<details>
-<summary><strong>v3.0.3</strong> · 2026. szept. 26.</summary>
-
-- Rajtoló: javítva, hogy egyes egyetemek Neptunján (pl. ME) a kurzus Rajtolóhoz
-  adásakor „A Rajtoló terve nem menthető” hibát kaptál. A hiányzó félév-azonosítót
-  az NPU most a kurzuslista kéréséből pótolja.
-
-[Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.0.3) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.0.3/npu.user.js)
 
 </details>
 

@@ -2,6 +2,8 @@
 
 ## Következő kiadás
 
+## 3.1.1 — 2026. szept. 27.
+
 **Órarendjavaslatok**
 
 - Javítva: ha egy tárgy egyik kurzusa (például az előadás) a Rajtolóban, a
