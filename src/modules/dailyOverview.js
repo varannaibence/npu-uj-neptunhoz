@@ -238,7 +238,14 @@ async function loadOverview(withDue) {
   if (!code) {
     return null;
   }
-  if (cache && cache.code === code && cache.withDue === withDue && nowMs - cache.at < CACHE_MS) {
+  // Same day too: "today" read at 23:55 is yesterday five minutes later.
+  if (
+    cache &&
+    cache.code === code &&
+    cache.withDue === withDue &&
+    nowMs - cache.at < CACHE_MS &&
+    dayKey(cache.at) === dayKey(nowMs)
+  ) {
     return cache.value;
   }
   const trainings = await httpRequest("GET", `${API_BASE}Calendar/GetStudentTrainings`);

@@ -94,6 +94,12 @@ const clearEntry = { course: { id: "clear", slots: [slot(2, 600, 720)] }, subjec
 
 // 1) a course with no timetable of its own: explicitly not comparable, whatever the baseline says
 assert.strictEqual(view.conflictVerdict({ id: "x", slots: [] }, [clashingEntry], true).state, "no-schedule");
+{
+  const untimed = { course: { id: "u", code: "SZD-01", slots: [] }, subject: { title: "Szakdolgozat" } };
+  const verdict = view.conflictVerdict({ id: "y", slots: [slot(5, 600, 660)] }, [untimed], true);
+  assert.strictEqual(verdict.state, "ok");
+  assert.strictEqual(verdict.label, "Nincs ismert ütközés", "no certainty against a course without a time");
+}
 assert.strictEqual(
   view.conflictVerdict({ id: "x" }, [clashingEntry], true).state,
   "no-schedule",

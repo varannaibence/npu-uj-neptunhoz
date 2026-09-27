@@ -45,7 +45,7 @@
 const router = require("../router");
 const settings = require("../settings");
 const badge = require("../badge");
-const { slotsOverlap } = require("../timetable");
+const { slotsOverlap, formatClock } = require("../timetable");
 const utils = require("../utils");
 const registrationData = require("../registrationData");
 const tokens = require("../neptunTokens");
@@ -230,10 +230,14 @@ function conflictVerdict(course, baseline, baselineComplete) {
       names: [],
     };
   }
+  const untimed = registrationData.untimedBaseline(baseline, course.id);
   return {
     state: "ok",
-    label: "Nincs ütközés",
-    title: "Nem ütközik a felvett vagy tervezett kurzusaiddal.",
+    label: untimed.length > 0 ? "Nincs ismert ütközés" : "Nincs ütközés",
+    title:
+      untimed.length > 0
+        ? `Nem ütközik az időponttal rendelkező kurzusaiddal; ezekkel nem ellenőrizhető: ${untimed.map(conflictName).join(", ")}.`
+        : "Nem ütközik a felvett vagy tervezett kurzusaiddal.",
     names: [],
   };
 }
@@ -340,18 +344,7 @@ function seatCountText(course) {
 // invariant 5 says not to guess a waiting-list verdict, so "not full" alone must not be
 // promoted to "free" - that would silently overclaim there is no queue. `seatsTitle`
 // spells out why the cell gets a neutral, explicit unknown label in that case.
-function seatState(course) {
-  if (!course || typeof course.isFull !== "boolean") {
-    return null;
-  }
-  if (course.isFull) {
-    return "full";
-  }
-  if (typeof course.willBeOnWaitingList !== "boolean") {
-    return null;
-  }
-  return course.willBeOnWaitingList ? "waitlist" : "free";
-}
+const { seatState } = registrationData;
 
 function freeSeatFromCourse(course) {
   const state = seatState(course);
@@ -395,12 +388,6 @@ function seatsTitle(state, course) {
     return "A kurzus nem telt be, de nem ismert, hogy egy új jelentkezés várólistára kerülne-e.";
   }
   return "Ennél a kurzusnál nem ismert a betelt állapot.";
-}
-
-function formatClock(minutes) {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
 function formatSlotTime(slot) {

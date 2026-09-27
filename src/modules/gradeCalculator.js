@@ -294,8 +294,22 @@ function openCalculator(getSubjects) {
 
 function initialize() {
   let subjects = [];
+  // Only the answer to the page's latest request counts: after a term switch the old
+  // list is dropped at once, and a late or failed answer never brings it back.
+  let latestRequest = null;
+  interceptor.onRequest(SUBJECTS_ENDPOINT, (url, endpoint, request) => {
+    latestRequest = request && request.requestId;
+    subjects = [];
+  });
   interceptor.onResponse(SUBJECTS_ENDPOINT, (json, info) => {
-    if (router.getPath() === ROUTE && json && Array.isArray(json.data) && !(info && info.status >= 400)) {
+    if (
+      router.getPath() === ROUTE &&
+      info &&
+      info.requestId === latestRequest &&
+      json &&
+      Array.isArray(json.data) &&
+      !(info.status >= 400)
+    ) {
       subjects = json.data.filter(row => row && row.subjectName && typeof row.subjectCredit === "number");
     }
   });

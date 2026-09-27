@@ -204,12 +204,18 @@ function solverInput(targets, catalog, baseline) {
   return { input: { fixed, groups }, info };
 }
 
-// The variant written into the Rajtoló plan: only groups the plan already ranks. Each
-// keeps every course it had: the pick moves to the top, then the ones that fit this
-// variant in the strategy's order, then the rest as they were. A subject only in
-// Neptun's planner is never added - that would put it up for automatic registration
-// behind the student's back. A swap is left alone: the Rajtoló only applies for new
-// courses, so a held course is changed in Neptun. Immutable.
+// The courses of a pick's group that clash with the rest of its variant. Pure.
+function clashingIds(pick) {
+  return (pick.alternatives || []).filter(alternative => alternative.fits === false).map(a => a.courseId);
+}
+
+// The variant written into the Rajtoló plan: only groups the plan already ranks. The
+// pick moves to the top, then the ones that fit this variant in the strategy's order,
+// then the rest as they were - minus any that clash with this variant, or the run
+// would reach one once the better ones fill. A subject only in Neptun's planner is
+// never added - that would put it up for automatic registration behind the student's
+// back. A swap is left alone: the Rajtoló only applies for new courses, so a held
+// course is changed in Neptun. Immutable.
 function applyVariant(currentPlan, variant, strategy, info) {
   let next = currentPlan;
   variant.picks.forEach(pick => {
@@ -225,9 +231,10 @@ function applyVariant(currentPlan, variant, strategy, info) {
     }
     const order = (pick.rankings && pick.rankings[strategy]) || [pick.courseId];
     const fitting = order.filter(id => id !== pick.courseId && group.ranking.includes(id));
+    const clashing = clashingIds(pick);
     const ranking = [pick.courseId].concat(
       fitting,
-      group.ranking.filter(id => id !== pick.courseId && !fitting.includes(id))
+      group.ranking.filter(id => id !== pick.courseId && !fitting.includes(id) && !clashing.includes(id))
     );
     const groups = subject.groups.map(g => (g === group ? Object.assign({}, g, { ranking }) : g));
     next = Object.assign({}, next, {
@@ -781,7 +788,7 @@ function rajtoloAffected(variant) {
 }
 
 function applyToRajtolo(state, variant) {
-  if (writing || view.busy || view.stale) {
+  if (writing || view.busy || view.stale || state.running) {
     return;
   }
   view.undo = {
@@ -798,21 +805,36 @@ function applyToRajtolo(state, variant) {
 }
 
 // The Rajtoló groups the variant reorders, as lines for the confirmation. A course
-// the student never ranked is named as such: the next run would apply for it.
+// the student never ranked is named as such: the next run would apply for it. So is
+// every ranked course dropped for clashing, in a changed group or not.
 function rajtoloLines(variant) {
   return variant.picks
-    .filter(pick => {
-      const meta = view.info.get(pick.groupKey);
-      return pick.changed && pick.courseId && meta && meta.fromPlan && !meta.swap;
-    })
     .map(pick => {
       const meta = view.info.get(pick.groupKey);
+      if (!pick.courseId || !meta || !meta.fromPlan || meta.swap) {
+        return null;
+      }
+      const dropped = clashingIds(pick).filter(id => meta.ranking.includes(id));
+      if (!pick.changed && dropped.length === 0) {
+        return null;
+      }
       const course = courseOf(pick.groupKey, pick.courseId);
       const fresh = !meta.ranking.includes(pick.courseId);
-      return `${groupLabelOf(pick.groupKey)}: ${course ? courseLabel(course) : "kurzus"} a sor elejére${
-        fresh ? " (eddig nem volt a sorrendedben, a Rajtoló erre is jelentkezni fog)" : ""
-      }`;
-    });
+      const parts = [];
+      if (pick.changed) {
+        parts.push(
+          `${course ? courseLabel(course) : "kurzus"} a sor elejére${
+            fresh ? " (eddig nem volt a sorrendedben, a Rajtoló erre is jelentkezni fog)" : ""
+          }`
+        );
+      }
+      if (dropped.length > 0) {
+        const codes = dropped.map(id => courseOf(pick.groupKey, id)).map(c => (c ? courseLabel(c) : "kurzus"));
+        parts.push(`kikerül, mert ütközne: ${codes.join(", ")}`);
+      }
+      return `${groupLabelOf(pick.groupKey)}: ${parts.join("; ")}`;
+    })
+    .filter(Boolean);
 }
 
 function describeOp(op) {
@@ -1006,7 +1028,9 @@ function runApply(state, variant, ops, rajtoloChanges) {
           return;
         }
         const saved = rajtoloChanges ? touchedRankings(state.plan, variant, info) : [];
-        const rajtoloApplied = rajtoloChanges && utils.getNeptunCode() === code && state.plan.termId === termId;
+        // Not while armed: the run keeps the plan it was started with (as the row switch).
+        const rajtoloApplied =
+          rajtoloChanges && !state.running && utils.getNeptunCode() === code && state.plan.termId === termId;
         if (rajtoloApplied) {
           state.plan = applyVariant(state.plan, variant, strategy, info);
           ui.persistPlan(state);
@@ -1015,9 +1039,10 @@ function runApply(state, variant, ops, rajtoloChanges) {
         if (generation === view.generation) {
           view.undo = { code, termId, saved: rajtoloApplied ? saved : [], steps: outcome.done };
         }
+        const unchanged = rajtoloChanges && !rajtoloApplied ? " A Rajtoló sorrendje nem változott." : "";
         report(
           outcome.matches === true
-            ? `A Tervező frissült${rajtoloApplied ? ", és a Rajtoló sorrendje is" : ""}. A rács az oldal újratöltése után mutatja.`
+            ? `A Tervező frissült${rajtoloApplied ? ", és a Rajtoló sorrendje is" : ""}. A rács az oldal újratöltése után mutatja.${unchanged}`
             : outcome.matches === null
               ? "A Neptun elfogadta a módosítást, de a Tervező nem olvasható vissza; nézd meg a Tervezőt."
               : "A Neptun elfogadta a módosítást, de a visszaolvasott Tervező eltér; nézd meg a Tervezőt."

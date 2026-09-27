@@ -6,6 +6,7 @@ const {
   classifyResponse,
   validateCourseList,
   chooseCombination,
+  holdsRankedCourse,
   submissionOutcome,
   msUntilTarget,
   sessionChore,
@@ -60,6 +61,9 @@ async function runSubject(subject, deps) {
       return catalog;
     }
     const courseIndex = collectCourses(coursesBody).get(subject.subjectId) || new Map();
+    if (holdsRankedCourse(subject.groups, courseIndex)) {
+      return { kind: "held" };
+    }
     const courseIds = chooseCombination(subject.groups, courseIndex, excluded);
     if (!courseIds) {
       return { kind: "exhausted" };
@@ -115,7 +119,9 @@ async function runPlan(plan, deps) {
   return outcomes;
 }
 
-function summarize(outcomes) {
+// `stopped`: the run was stopped, so it did not finish even when every outcome reads
+// as done - a Stop during a submission's check leaves no "stopped" entry.
+function summarize(outcomes, stopped) {
   const count = kind => outcomes.filter(o => o.kind === kind).length;
   if (outcomes.some(o => o.kind === "notOpen")) {
     return "A tárgyjelentkezési időszak még nincs nyitva.";
@@ -128,8 +134,11 @@ function summarize(outcomes) {
   );
   const sentText = `${sent}/${outcomes.length} tárgy beküldve${details.length ? `, ebből ${details.join(", ")}` : ""}`;
   const haltedByUnknown = outcomes.some(o => o.kind === "unknown");
-  return haltedByUnknown
-    ? `Leállt ismeretlen hiba miatt (${sentText}; ellenőrizd a Neptunban).`
+  if (haltedByUnknown) {
+    return `Leállt ismeretlen hiba miatt (${sentText}; ellenőrizd a Neptunban).`;
+  }
+  return stopped || outcomes.some(o => o.kind === "stopped")
+    ? `Leállítva (${sentText}; ellenőrizd a Neptunban).`
     : `Kész: ${sentText}; ellenőrizd a Neptunban.`;
 }
 

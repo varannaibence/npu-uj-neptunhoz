@@ -219,6 +219,16 @@ assert.strictEqual(
   rajtolo.summarize([{ kind: "submitted" }, { kind: "unknown" }]),
   "Leállt ismeretlen hiba miatt (1/2 tárgy beküldve; ellenőrizd a Neptunban)."
 );
+assert.strictEqual(
+  rajtolo.summarize([{ kind: "submitted" }, { kind: "stopped" }]),
+  "Leállítva (1/2 tárgy beküldve; ellenőrizd a Neptunban).",
+  "a stopped run is never reported as done"
+);
+assert.strictEqual(
+  rajtolo.summarize([{ kind: "submitted" }], true),
+  "Leállítva (1/1 tárgy beküldve; ellenőrizd a Neptunban).",
+  "nor one stopped during the last check"
+);
 
 // the next-combination chooser: highest-ranked non-full, non-excluded course per
 // group; null means exhausted, not "submit an empty courseIds"
@@ -255,6 +265,32 @@ assert.strictEqual(
   "already-excluded (a prior reject) counts the same as full"
 );
 assert.deepStrictEqual(rajtolo.chooseCombination([], courseIndex, new Set()), [], "no groups -> empty combination");
+{
+  const held = new Map([
+    ["L1", { id: "L1", isFull: false, isSigned: true }],
+    ["L2", { id: "L2", isFull: false }],
+    ["G1", { id: "G1", isFull: false }],
+  ]);
+  assert.strictEqual(
+    rajtolo.chooseCombination([{ ranking: ["L1", "L2"] }, { ranking: ["G1"] }], held, new Set()),
+    null,
+    "a held ranked course is never swapped for the next-ranked one"
+  );
+  const queue = new Map([
+    ["G1", { id: "G1", isFull: false, willBeOnWaitingList: true }],
+    ["G2", { id: "G2", isFull: false, willBeOnWaitingList: false }],
+  ]);
+  assert.deepStrictEqual(
+    rajtolo.chooseCombination([{ ranking: ["G1", "G2"] }], queue, new Set()),
+    ["G2"],
+    "a seat beats a higher-ranked waiting list"
+  );
+  assert.deepStrictEqual(
+    rajtolo.chooseCombination([{ ranking: ["G1"] }], queue, new Set()),
+    ["G1"],
+    "with no seat anywhere, the waiting list is still tried"
+  );
+}
 
 // the reorder primitive behind every up/down button (buttons, not drag-drop)
 assert.deepStrictEqual(rajtolo.moveUp(["a", "b", "c"], 1), ["b", "a", "c"]);
@@ -485,6 +521,30 @@ async function runEngineChecks() {
     const outcome = await rajtolo.runSubject(subject("s1", [{ type: "Elmélet", ranking: ["c1"] }]), deps);
     assert.ok(posted, "a waiting-list place is still worth taking - it must be submitted");
     assert.strictEqual(outcome.kind, "submitted", "the forecast is not presented as a confirmed placement");
+  }
+
+  // A subject the student already holds a ranked course of is left alone: no POST.
+  {
+    let posted = false;
+    const deps = {
+      get: () =>
+        Promise.resolve({
+          data: [
+            { id: "c1", subjectId: "s1", isFull: false, isSigned: true },
+            { id: "c2", subjectId: "s1", isFull: false },
+          ],
+          notification: [],
+        }),
+      post: () => {
+        posted = true;
+        return Promise.resolve({ data: {}, notification: [] });
+      },
+      delay: noDelay,
+      controller: fakeController(),
+    };
+    const outcome = await rajtolo.runSubject(subject("s1", [{ type: "Elmélet", ranking: ["c1", "c2"] }]), deps);
+    assert.strictEqual(outcome.kind, "held");
+    assert.strictEqual(posted, false, "a held course is never swapped for the next-ranked one");
   }
 
   // After an answered submission the same course list is read once more, and only the

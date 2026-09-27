@@ -44,7 +44,7 @@
 //     itself has no timetable of its own to compare - draws an explicit neutral label
 //     and the title says why, instead of staying silent or showing a cryptic "?".
 const router = require("../router");
-const { slotsOverlap, setNoteSlotsEnabled } = require("../timetable");
+const { slotsOverlap, setNoteSlotsEnabled, formatClock } = require("../timetable");
 const settings = require("../settings");
 const badge = require("../badge");
 const registrationData = require("../registrationData");
@@ -119,12 +119,6 @@ function codeIn(row, knownCodes) {
     element => element.children.length === 0 && knownCodes.has(normaliseCode(element.textContent))
   );
   return leaf ? normaliseCode(leaf.textContent) : null;
-}
-
-function formatClock(minutes) {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
 // One warning per other course, even if two repeating slots overlap. The exact pair
@@ -229,12 +223,16 @@ function hintForCourse(candidate, baseline, baselineComplete) {
       title: unknownReason(candidate),
     };
   }
+  const untimed = registrationData.untimedBaseline(baseline, candidate.id);
   return {
     tone: "ok",
     count: 0,
     lines: [],
-    label: "Nincs ütközés",
-    title: "",
+    label: untimed.length > 0 ? "Nincs ismert ütközés" : "Nincs ütközés",
+    title:
+      untimed.length > 0
+        ? `Időpont nélküli kurzusaiddal nem ellenőrizhető: ${untimed.map(entry => conflictName({ other: entry })).join(", ")}.`
+        : "",
   };
 }
 

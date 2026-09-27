@@ -16,6 +16,7 @@ const {
   courseLabel,
 } = require("./protocol");
 const { liveGet, liveGetPeriods } = require("./net");
+const { formatClock } = require("../../timetable");
 
 let smallButtonCssInjected = false;
 
@@ -261,6 +262,8 @@ function openPlanner(state) {
         },
       },
     ],
+    // Another NPU dialog would close this one, and closing it stops the run.
+    busy: () => (state.running ? "A Rajtoló élesítve van; előbb állítsd le, utána nyílhat meg más NPU-ablak." : null),
     onClose() {
       if (state.running && state.controller) {
         state.statusText = "Leállítás folyamatban…";
@@ -306,12 +309,6 @@ function buildPlanPicks(state) {
 
 function planConflicts(state) {
   return findPlanConflicts(buildPlanPicks(state));
-}
-
-function formatClock(minutes) {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 function sideText(pick, slot) {
@@ -380,7 +377,11 @@ function buildConflictWarning(conflicts) {
 // until a response has been seen: a "0" in that gap would read as "you have zero
 // credits" instead of "not loaded yet".
 function buildCreditForecast(state) {
-  if (!state.registeredCredits) {
+  const otherTerm =
+    state.registeredCreditsTermId &&
+    state.catalogRequestTermId &&
+    state.registeredCreditsTermId !== state.catalogRequestTermId;
+  if (!state.registeredCredits || otherTerm) {
     return null;
   }
   const planned = plannedCredits(state.plan, state.subjectCatalog);

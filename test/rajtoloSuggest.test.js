@@ -109,6 +109,21 @@ assert.deepStrictEqual(applied.subjects[0].groups[0], rajtoloPlan.subjects[0].gr
 assert.strictEqual(applied.subjects[1], rajtoloPlan.subjects[1], "a group left out stays as it was");
 assert.strictEqual(applied.subjects.length, 2, "a planner-only subject is never put up for automatic registration");
 assert.deepStrictEqual(rajtoloPlan.subjects[0].groups[1].ranking, ["s1g2", "s1g1"], "immutable");
+const clashingFallback = {
+  picks: [
+    {
+      groupKey: "S1|GYAK",
+      courseId: "s1g1",
+      rankings: { gaps: ["s1g1"] },
+      alternatives: [{ courseId: "s1g2", fits: false, clashesWith: ["S2|GYAK"] }],
+    },
+  ],
+};
+assert.deepStrictEqual(
+  suggest.applyVariant(rajtoloPlan, clashingFallback, "gaps", info).subjects[0].groups[1].ranking,
+  ["s1g1"],
+  "a ranked course that clashes with the variant is never left as a fallback"
+);
 assert.ok(closest, "the solver ran on this input");
 assert.strictEqual(
   suggest.applyVariant(Object.assign({}, rajtoloPlan, { termId: "other" }), variant, "gaps", info).subjects.length,

@@ -100,6 +100,18 @@ function setAuthHeader(value, metadata, force) {
   });
 }
 
+// Whether the answer to a request sent with `header` still belongs to the current
+// session: a response that outlived a logout or another login must not speak for the
+// new user. A header-less request (the login itself) cannot be judged and passes.
+function isCurrentSession(header) {
+  const sent = normaliseAuth(header);
+  if (!sent || sent === lastAuthHeader) {
+    return true;
+  }
+  const sessionId = readAuthClaims(sent).sessionId;
+  return Boolean(sessionId && sessionId === authSessionId);
+}
+
 // Null before the app's first authenticated call.
 function getAuthHeader() {
   return lastAuthHeader;
@@ -422,6 +434,7 @@ module.exports = {
   readAuthClaims,
   isUserBoundary,
   isAuthSignal,
+  isCurrentSession,
   clearAuthHeader,
   invalidateAuthHeader,
   allowAuthRetry,

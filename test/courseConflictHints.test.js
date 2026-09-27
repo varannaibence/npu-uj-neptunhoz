@@ -91,6 +91,13 @@ const confirmedHu = conflictHints.hintForCourse(touching, baseline, true);
 assert.strictEqual(confirmedHu.tone, "ok");
 assert.strictEqual(confirmedHu.count, 0);
 assert.strictEqual(confirmedHu.label, "Nincs ütközés", "the clear verdict is shown, not silence");
+const withUntimed = conflictHints.hintForCourse(
+  touching,
+  baseline.concat([{ course: { id: "untimed", code: "SZD-01", slots: [] }, subject: { title: "Szakdolgozat" } }]),
+  true
+);
+assert.strictEqual(withUntimed.label, "Nincs ismert ütközés", "a held course without a time was never checked");
+assert.ok(withUntimed.title.includes("Szakdolgozat"), "and it is named");
 
 // 2b) a course already enrolled in is left to Neptun's native "Kurzus felvéve" state.
 // Even a registered row with a timetable conflict must not get our extra badge.

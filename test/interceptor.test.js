@@ -226,6 +226,13 @@ assert.strictEqual(interceptor.isUserBoundary("s-1", null, null, undefined), tru
     { auth: false, userBoundary: true, previous: "s-2" },
     { auth: true, userBoundary: true, previous: null },
   ]);
+  assert.strictEqual(
+    interceptor.isCurrentSession(fakeJwt({ SessionId: "s-1", iat: 1900, exp: 2200 })),
+    false,
+    "an answer sent before another login speaks for nobody now"
+  );
+  assert.strictEqual(interceptor.isCurrentSession(fakeJwt({ SessionId: "s-3", iat: 2900, exp: 3200 })), true);
+  assert.strictEqual(interceptor.isCurrentSession(null), true, "the login itself carries no header");
   unsubscribe();
   interceptor.allowAuthRetry();
 }

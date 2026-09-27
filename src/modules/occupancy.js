@@ -180,29 +180,9 @@ function occupancyLabel(state) {
   return `${state.registered} / ${state.limit}`;
 }
 
-// NOT what the field name suggests: `isFull` means "you cannot apply at all", not
-// "there is no room". A course at its limit with a waiting list comes back
-// isFull:false + willBeOnWaitingList:true. Treating that as free is how the badge
-// once called a full course free.
-//
-//   free     - a seat is yours on registering
-//   waitlist - you can apply, but you are queueing
-//   full     - you cannot apply
-function seatState(state) {
-  if (!state) {
-    return null;
-  }
-  if (typeof state.isFull !== "boolean") {
-    return null;
-  }
-  if (state.isFull) {
-    return "full";
-  }
-  if (typeof state.willBeOnWaitingList !== "boolean") {
-    return null;
-  }
-  return state.willBeOnWaitingList ? "waitlist" : "free";
-}
+// NOT what the field name suggests: `isFull` alone once called a full course free.
+// One shared reading, so the badge, the table and the Rajtoló never disagree.
+const { seatState } = registrationData;
 
 // A queue place is not a seat. The sort key, and what the subject badge counts.
 function seatsGone(state) {

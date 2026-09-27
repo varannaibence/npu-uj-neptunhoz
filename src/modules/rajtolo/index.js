@@ -28,6 +28,7 @@ const suggest = require("./suggest");
 const settings = require("../../settings");
 const { showToast } = require("../../toast");
 const registrationData = require("../../registrationData");
+const { termIdFromUrl } = require("../creditBreakdown");
 
 const { collectSubjects, collectCourses, registeredCredits, emptyPlan, loadPlan } = plan;
 const { statusLabel, toastTone, msUntilTarget, wallClockToEpoch, formatCountdown, runTitle } = protocol;
@@ -115,11 +116,15 @@ function ensureState() {
     periodsErrorReason: null,
     selectedPeriodId: null,
     catalogTermId: null,
+    // The numeric request.termId of the last subject list: an empty list names no
+    // term GUID, so only this shows that the page moved to another term.
+    catalogRequestTermId: null,
     planLoadedForIdentity: null,
     courseCatalogGeneration: 0,
     // Null until a response has been seen; this module never issues that request
     // itself, only rides creditBreakdown's.
     registeredCredits: null,
+    registeredCreditsTermId: null,
     onStartStop: () => onStartStop(plannerState),
   };
   // Claimed before a single handler is registered: a second ensureState() must find
@@ -182,6 +187,8 @@ function ensureState() {
     }
     if (!code || (previous && previous !== code)) {
       resetForTerm(plannerState, null);
+      // Another user's credits: "not loaded yet" until their own answer.
+      plannerState.registeredCredits = null;
       plannerState.statusText = code
         ? "Új felhasználó érzékelve; a terv újratöltése folyamatban."
         : "A munkamenet lejárt; a terv törölve a memóriából.";
@@ -201,6 +208,8 @@ function ensureState() {
       return;
     }
     plannerState.registeredCredits = registeredCredits(json);
+    // Kept with its term: this can answer before the new term's subject list does.
+    plannerState.registeredCreditsTermId = termIdFromUrl(info && info.url);
     render(plannerState);
   });
   interceptor.onResponse(SUBJECTS_ENDPOINT, (json, info) => {
@@ -210,8 +219,18 @@ function ensureState() {
     const incoming = Array.isArray(json && json.data)
       ? json.data.find(row => row && typeof row.termId === "string" && row.termId)
       : null;
+    const requestTermId = termIdFromUrl(info && info.url);
+    const movedToEmptyTerm =
+      !incoming &&
+      requestTermId &&
+      plannerState.catalogRequestTermId &&
+      requestTermId !== plannerState.catalogRequestTermId;
+    plannerState.catalogRequestTermId = requestTermId || plannerState.catalogRequestTermId;
     if (incoming && plannerState.catalogTermId && plannerState.catalogTermId !== incoming.termId) {
       resetForTerm(plannerState, incoming.termId);
+    } else if (movedToEmptyTerm) {
+      // Otherwise the previous term's plan would stay armable on a term with no subjects.
+      resetForTerm(plannerState, null);
     } else if (incoming && !plannerState.catalogTermId) {
       plannerState.catalogTermId = incoming.termId;
     }
@@ -394,9 +413,10 @@ function onStartStop(state) {
     onDone: outcomes => {
       state.running = false;
       // Stopped before the start: keep a reason already shown, such as a logout.
-      const stoppedEarly = outcomes.length === 0 && state.controller && state.controller.stopped;
+      const stopped = Boolean(state.controller && state.controller.stopped);
+      const stoppedEarly = outcomes.length === 0 && stopped;
       state.statusText = !stoppedEarly
-        ? summarize(outcomes)
+        ? summarize(outcomes, stopped)
         : state.statusText === "Leállítás folyamatban…"
           ? "Leállítva a felhasználó által."
           : state.statusText;
