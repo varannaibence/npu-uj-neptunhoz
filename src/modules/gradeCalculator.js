@@ -115,6 +115,10 @@ function checkFormula(subjects, termData) {
   const computed = computeIndices(
     (subjects || []).map(row => ({ credits: row.subjectCredits, grade: parseGrade(row.result) }))
   );
+  // A term with nothing completed matches any formula (0 = 0) and proves nothing.
+  if (computed.credit === 0) {
+    return { ok: false, reason: "noValues" };
+  }
   const pairs = [
     [computed.credit, "Credit", true],
     [computed.creditAll, "CreditAll", true],
@@ -126,7 +130,8 @@ function checkFormula(subjects, termData) {
   return ok ? { ok: true } : { ok: false, reason: "mismatch" };
 }
 
-// Closed terms, newest first: every term but the current one.
+// Closed terms, newest first: every term but the current one. The label only saves a
+// request - it is localized, so verifyFormula still skips any term without values.
 function closedTerms(terms) {
   return (Array.isArray(terms) ? terms : [])
     .filter(t => t && t.studentTrainingTermDataId && typeof t.term === "string")
@@ -162,7 +167,8 @@ async function verifyFormula() {
   if (!isOk(terms)) {
     return { ok: false, reason: "network" };
   }
-  for (const term of closedTerms(terms.data).slice(0, 2)) {
+  // Three, not two: if the label did not match, the current term takes one of them.
+  for (const term of closedTerms(terms.data).slice(0, 3)) {
     const id = encodeURIComponent(term.studentTrainingTermDataId);
     const data = await httpRequest(
       "GET",
@@ -178,7 +184,11 @@ async function verifyFormula() {
     if (!isOk(subjects) || !Array.isArray(subjects.data)) {
       return { ok: false, reason: "network" };
     }
-    return remember(code, Object.assign(checkFormula(subjects.data, data.data), { term: term.term }));
+    const result = checkFormula(subjects.data, data.data);
+    if (result.reason === "noValues") {
+      continue;
+    }
+    return remember(code, Object.assign(result, { term: term.term }));
   }
   return remember(code, { ok: false, reason: "noValues" });
 }

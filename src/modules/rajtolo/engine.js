@@ -12,7 +12,7 @@ const {
   tokenExpired,
 } = require("./protocol");
 const { liveGet, livePost, liveDelay, freshenAuth } = require("./net");
-const { MAX_ATTEMPTS } = require("./constants");
+const { MAX_ATTEMPTS, STATUS_KEY } = require("./constants");
 
 // --- The run engine. Every network and timing effect is injected via `deps`, so the
 // whole thing - including "Stop actually stops" - is testable with fakes. ---
@@ -237,17 +237,12 @@ function scheduleRun(targetEpochMs, plan, controller, callbacks) {
   function begin() {
     started = true;
     // A long run outlives the 5-minute token; renew it before a request would bounce.
-    // ponytail: a token expiring in the milliseconds between check and arrival still
-    // 401s, which halts the run as unknown - fail-closed, never a blind resend.
-    const fresh =
-      request =>
-      async (...args) => {
-        // No header at all is a token a 401 has just retired.
-        if (!interceptor.getAuthHeader() || tokenExpired(interceptor.getAuthTiming(), Date.now())) {
-          await freshenAuth();
-        }
-        return request(...args);
-      };
+    const session = {
+      // No header at all is a token a 401 has just retired.
+      needsRenewal: () => !interceptor.getAuthHeader() || tokenExpired(interceptor.getAuthTiming(), Date.now()),
+      renew: freshenAuth,
+    };
+    const fresh = request => withRenewal(request, session);
     const deps = {
       get: fresh(liveGet),
       post: fresh(livePost),
@@ -270,4 +265,21 @@ function scheduleRun(targetEpochMs, plan, controller, callbacks) {
   armStart();
 }
 
-module.exports = { runSubject, runPlan, summarize, createController, scheduleRun, startTimeout };
+// Wraps a live request: renews a missing or expired token first, and answers a 401 -
+// the server refused the token, so it processed nothing - with one renewal and one
+// resend. Anything else, a timeout included, comes back as it came: a request that
+// may have been processed is never sent again (AGENTS.md invariant 6).
+function withRenewal(request, session) {
+  return async (...args) => {
+    if (session.needsRenewal()) {
+      await session.renew();
+    }
+    const response = await request(...args);
+    if (!response || response[STATUS_KEY] !== 401 || !(await session.renew())) {
+      return response;
+    }
+    return request(...args);
+  };
+}
+
+module.exports = { runSubject, runPlan, summarize, createController, scheduleRun, startTimeout, withRenewal };

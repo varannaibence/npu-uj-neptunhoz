@@ -66,6 +66,12 @@ assert.deepStrictEqual(
 );
 
 assert.deepStrictEqual(
+  calc.checkFormula([{ subjectCredits: 4, result: null }], termData({ Credit: 0, KreditIndex: 0 })),
+  { ok: false, reason: "noValues" },
+  "a term with nothing completed matches any formula and proves nothing"
+);
+
+assert.deepStrictEqual(
   calc
     .closedTerms([
       { term: "2025/26/1", studentTrainingTermDataId: "a", uiDisplayState: { reasons: ["Aktív"] } },

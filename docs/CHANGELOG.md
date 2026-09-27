@@ -4,6 +4,11 @@
 
 **Rajtoló**
 
+- Ha a Neptun egy kérésnél a lejárt token miatt 401-et ad, a Rajtoló friss
+  tokent kér a Neptuntól, és a kérést egyszer újraküldi; eddig ez leállította a
+  futást. Időtúllépéses kérést továbbra sem küld újra.
+- Olyan egyetemen, ahol a token nem hordoz munkamenet-azonosítót, a futás már nem
+  áll le minden tokenfrissítéskor.
 - Beküldés után a Rajtoló egyszer újra lekéri a tárgy kurzuslistáját, és a
   Neptun saját állapotmezői alapján „Felvéve” vagy „Várólistára került”
   eredményt mutat. Ha ez nem dönthető el, „Beküldve” marad, és a futás ettől
@@ -70,6 +75,13 @@
 
 **Egyéb**
 
+- Javítva: bejelentkezés után az első kérés törölte a Neptun-kódot, ezért a
+  Rajtoló terve, a „Mi van ma?” kártyái és a napi értesítés nem működtek az oldal
+  újratöltéséig.
+- A Munkamenet életben tartása akkor is közbelép, ha a legutóbbi tokenfrissítés
+  10 percnél régebbi; a 12,5 perces tétlenség önmagában sokszor túl későn jött.
+- Az átlagkalkulátor képletellenőrzése nem függ a félév feliratától, és teljesített
+  kredit nélküli félévet nem fogad el bizonyítéknak.
 - Beállítások: a kapcsolók a README-vel egyező csoportokban jelennek meg
   (Tárgyfelvétel, Rajtoló, Mindennapok, Megjelenés és kényelem). A „Mi van ma?”
   Befizetendő és Időszakok kártyája, valamint a napi értesítés külön

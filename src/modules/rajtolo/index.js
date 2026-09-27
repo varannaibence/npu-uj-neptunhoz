@@ -228,7 +228,10 @@ function ensureState() {
   // A renewed token is the same user and the run carries on: net.js reads the header
   // afresh for every request. Only logout or another login stops it.
   interceptor.onAuthChange((auth, info) => {
-    if (plannerState.running && info && info.userBoundary) {
+    // A boundary FROM no known session is the first sight of one, not a switch: a
+    // token without a readable SessionId would otherwise stop the run at every renewal.
+    // Logout (no header) always stops it.
+    if (plannerState.running && info && info.userBoundary && (!auth || info.previousSessionId)) {
       plannerState.statusText = auth
         ? "Új munkamenet érzékelve; a futás leállt."
         : "A munkamenet lejárt; a futás leállt.";

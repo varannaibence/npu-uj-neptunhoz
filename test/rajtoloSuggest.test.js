@@ -285,3 +285,79 @@ assert.deepStrictEqual(suggest.plannerAnswer(null, "s"), { ok: false, message: "
   assert.deepStrictEqual(withPlanner[0].groups[1].planned, ["pl"]);
   assert.deepStrictEqual(withPlanner[0].groups[1].ranking, ["s1g2", "s1g1"], "the Rajtoló ranking stays its own");
 }
+
+// Regression (branch review): the per-subject list is not re-read after a planner
+// write, so a removed course may linger there. Only the planner endpoint's own rows
+// count as planned, and the lingering one never reaches the next Apply.
+{
+  global.location = global.location || { origin: "https://neptun.example", pathname: "/" };
+  const registrationData = require("../src/registrationData");
+  const staleSubjects = registrationData.collectScheduleSubjects({
+    data: [Object.assign({ id: "SX", title: "Tárgy", isRegistered: false, scheduledCourseIds: ["gone"] }, ids)],
+  });
+  const staleCourses = registrationData.collectCourses({
+    data: [
+      { id: "gone", subjectId: "SX", code: "GONE", type: "Gyak", comparationTypeId: "G", isSigned: false },
+      { id: "kept", subjectId: "SX", code: "KEPT", type: "Gyak", comparationTypeId: "G", isSigned: false },
+    ],
+  });
+  const reread = registrationData.collectPlannerCourses({
+    data: [
+      Object.assign(
+        {
+          id: "kept",
+          subjectId: "SX",
+          title: "Tárgy",
+          code: "KEPT",
+          type: "Gyak",
+          comparationTypeId: "G",
+          classInstanceInfos: [],
+          isRegistered: false,
+          isSigned: false,
+          isOnWaitingList: false,
+        },
+        ids
+      ),
+    ],
+  });
+  const staleBaseline = registrationData.buildBaseline(staleSubjects, staleCourses, reread.entries);
+  assert.deepStrictEqual(
+    staleBaseline.filter(item => item.source === "planned").map(item => `${item.course.id}:${item.origin}`),
+    ["kept:planner", "gone:subject"]
+  );
+  const staleTargets = suggest.planTargets({ termId: "t", subjects: [] }, staleBaseline);
+  assert.deepStrictEqual(staleTargets[0].groups[0].planned, ["kept"], "a lingering course is not planned");
+}
+
+// Regression (branch review): without a type id, a held lecture is not "the held one"
+// of a planned lab - the lab is no swap, and the lecture stays fixed in the week.
+{
+  const lecture = course("lec", "SL", null, "Előadás", [slot(1, "08:00", "10:00")], { isSigned: true });
+  const lab = course("labA", "SL", null, "Labor", [slot(1, "08:00", "10:00")]);
+  const noIdBaseline = [
+    { source: "registered", course: lecture, subject: { title: "Tárgy" } },
+    { source: "planned", origin: "planner", course: lab, subject: Object.assign({ title: "Tárgy" }, ids) },
+  ];
+  const noIdTargets = suggest.planTargets({ termId: "t", subjects: [] }, noIdBaseline);
+  assert.strictEqual(noIdTargets[0].groups[0].swap, null, "a held lecture is not a held lab");
+  const noIdCatalog = new Map([
+    ["SL", new Map([lecture, lab].map(c => [c.id, Object.assign({}, c, { typeId: null })]))],
+  ]);
+  const noId = suggest.solverInput(noIdTargets, noIdCatalog, noIdBaseline);
+  assert.strictEqual(noId.input.fixed.length, 1, "the held lecture stays in the week");
+  const [noIdVariant] = suggestSchedules(noId.input).variants;
+  assert.strictEqual(noIdVariant.complete, false, "the clashing lab is never called clash-free");
+  const rajtoloNoId = suggest.planTargets(
+    {
+      termId: "t",
+      subjects: [
+        Object.assign(
+          { subjectId: "SL", title: "Tárgy", groups: [{ type: "Labor", typeId: null, ranking: ["labA"] }] },
+          ids
+        ),
+      ],
+    },
+    [noIdBaseline[0]]
+  );
+  assert.strictEqual(rajtoloNoId.length, 1, "a Rajtoló lab group is not dropped for a held lecture");
+}

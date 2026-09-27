@@ -1052,3 +1052,54 @@ module.exports = { run: runEngineChecks };
     }
   }
 }
+
+// withRenewal: a refused token is renewed and the request sent once more; nothing
+// else is ever resent.
+{
+  const { withRenewal } = require("../src/modules/rajtolo/engine");
+  const { STATUS_KEY } = require("../src/modules/rajtolo/constants");
+  const answers = (...list) => {
+    const calls = [];
+    const request = (...args) => {
+      calls.push(args);
+      return Promise.resolve(list.shift());
+    };
+    return { request, calls };
+  };
+  const session = (renewed, needs = false) => {
+    const log = { renewals: 0 };
+    return Object.assign(log, {
+      needsRenewal: () => needs,
+      renew: () => {
+        log.renewals++;
+        return Promise.resolve(renewed);
+      },
+    });
+  };
+  const check = async () => {
+    const refused = answers({ [STATUS_KEY]: 401 }, { [STATUS_KEY]: 200, data: [] });
+    const renewing = session(true);
+    const ok = await withRenewal(refused.request, renewing)("s", ["c"]);
+    assert.strictEqual(ok[STATUS_KEY], 200);
+    assert.strictEqual(refused.calls.length, 2, "a 401 is resent once after a renewal");
+    assert.deepStrictEqual(refused.calls[1], ["s", ["c"]]);
+
+    const stillRefused = answers({ [STATUS_KEY]: 401 }, { [STATUS_KEY]: 200 });
+    const out = await withRenewal(stillRefused.request, session(false))();
+    assert.strictEqual(out[STATUS_KEY], 401, "no new token, no resend");
+    assert.strictEqual(stillRefused.calls.length, 1);
+
+    const timedOut = answers({ notification: [{ description: "A szerver nem válaszolt időben.", type: 3 }] });
+    const quiet = session(true);
+    await withRenewal(timedOut.request, quiet)();
+    assert.strictEqual(timedOut.calls.length, 1, "a timeout may have been processed: never resent");
+    assert.strictEqual(quiet.renewals, 0);
+
+    const expired = answers({ [STATUS_KEY]: 200 });
+    const before = session(true, true);
+    await withRenewal(expired.request, before)();
+    assert.strictEqual(before.renewals, 1, "an expired token is renewed before the request");
+  };
+  const previousRun = module.exports.run;
+  module.exports.run = () => previousRun().then(check);
+}

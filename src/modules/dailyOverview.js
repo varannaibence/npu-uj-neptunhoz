@@ -459,12 +459,13 @@ function mount() {
 
 function remind() {
   const today = dayKey(Date.now());
+  const code = utils.getNeptunCode();
   let previous;
   storage
     .initialize()
     .then(() => {
       previous = storage.getForUser("dailyOverview", "remindedOn");
-      if (!utils.getNeptunCode() || previous === today) {
+      if (!code || utils.getNeptunCode() !== code || previous === today) {
         return undefined;
       }
       // Claimed before the requests, so a second tab opened meanwhile stays quiet.
@@ -472,7 +473,8 @@ function remind() {
       return loadOverview(wantDue()).catch(() => null);
     })
     .then(overview => {
-      if (overview === undefined) {
+      // Another user logged in meanwhile: their record and their screen are not ours.
+      if (overview === undefined || utils.getNeptunCode() !== code) {
         return;
       }
       const outcome = reminderOutcome(overview, wantDue());
@@ -498,7 +500,8 @@ function initialize() {
   let scheduled = false;
   function tick() {
     scheduled = false;
-    if (DASHBOARD_ROUTES.includes(router.getPath()) && interceptor.getAuthHeader()) {
+    // The cards are per user (cache, payments), so not before the identity is known.
+    if (DASHBOARD_ROUTES.includes(router.getPath()) && interceptor.getAuthHeader() && utils.getNeptunCode()) {
       mount();
     }
   }
@@ -513,6 +516,9 @@ function initialize() {
   // After the identity is known, so the reminder is per user and never before login.
   utils.onNeptunCodeChange(code => {
     cache = null;
+    // Cards drawn for the previous user go; the next tick draws the new user's.
+    document.querySelectorAll(`[${CARD_ATTR}]`).forEach(card => card.remove());
+    scheduleTick();
     if (code && options.reminders) {
       setTimeout(remind, 3000);
     }
