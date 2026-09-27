@@ -116,6 +116,11 @@ function injectCss() {
 .${OVERLAY_CLASS} .npu-dialog-small .basic-dialog-title,
 .${OVERLAY_CLASS} .npu-dialog-small .basic-dialog-content,
 .${OVERLAY_CLASS} .npu-dialog-small .mat-mdc-dialog-actions { padding-left: 40px; padding-right: 40px; }
+@media (max-width: 480px) {
+  .${OVERLAY_CLASS} .npu-dialog-small .basic-dialog-title,
+  .${OVERLAY_CLASS} .npu-dialog-small .basic-dialog-content,
+  .${OVERLAY_CLASS} .npu-dialog-small .mat-mdc-dialog-actions { padding-left: 20px; padding-right: 20px; }
+}
 .${DIALOG_CLASS} .basic-dialog-wrapper {
   position: relative; display: flex; flex: 1 1 auto; flex-direction: column;
   min-height: 0; overflow: hidden;

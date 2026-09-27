@@ -286,7 +286,8 @@ function patchXhr(target) {
   };
   const send = XHR.prototype.send;
   XHR.prototype.send = function (...args) {
-    // A header-less Account/* call (a new login) is the observable logout boundary.
+    // A header-less Account/Authenticate (a new login) is a session boundary; logout
+    // itself sends nothing and shows only as the /login route (index.js).
     const endpoint = getEndpoint(this.__npuUrl || this.url);
     if (endpoint && !this.__npuOwn) {
       lastPageRequestAt = Date.now();

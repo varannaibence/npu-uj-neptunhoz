@@ -411,7 +411,45 @@ assert.deepStrictEqual(suggest.plannerAnswer(null, "s"), { ok: false, message: "
     assert.strictEqual(failed.ok, false);
     assert.strictEqual(failed.failure.message, "Nem tervezhető.");
     assert.strictEqual(failed.restored, true);
+
+    // A planner that cannot be read back is "unknown", never "unchanged".
+    const unread = scripted([refusal]);
+    const unknown = await suggest.applySteps(steps, unread.send, () => Promise.resolve(null));
+    assert.strictEqual(unknown.restored, null);
+    const done2 = await suggest.applySteps(steps, scripted([]).send, () => Promise.resolve(null));
+    assert.strictEqual(done2.matches, null);
+    // A step halted because another user logged in stops the batch.
+    const halted = scripted([{ halted: true }]);
+    const stopped = await suggest.applySteps(steps, halted.send, () => Promise.resolve(true));
+    assert.strictEqual(stopped.ok, false);
+    assert.deepStrictEqual(halted.sent, ["remove:old"], "nothing after the halted step, nothing to undo");
   };
   const previousRun = module.exports.run;
   module.exports.run = () => Promise.resolve(previousRun && previousRun()).then(check);
+}
+
+// Regression (second review): a planned course of a registered subject is upgraded to
+// "registered" by the subject row; that is not a held course.
+{
+  const labPlanned = course("labP", "SR", "LAB", "Labor", [slot(2, "08:00", "10:00")]);
+  const fromSubjectRow = [
+    { source: "registered", origin: "subject", course: labPlanned, subject: Object.assign({ title: "R" }, ids) },
+  ];
+  const plannedRajtolo = {
+    termId: "t",
+    subjects: [
+      Object.assign(
+        { subjectId: "SR", title: "R", groups: [{ type: "Labor", typeId: "LAB", ranking: ["labP"] }] },
+        ids
+      ),
+    ],
+  };
+  assert.strictEqual(
+    suggest.planTargets(plannedRajtolo, fromSubjectRow).length,
+    1,
+    "the Rajtoló lab group is not taken for held"
+  );
+  const catalogR = new Map([["SR", new Map([[labPlanned.id, labPlanned]])]]);
+  const inputR = suggest.solverInput(suggest.planTargets(plannedRajtolo, fromSubjectRow), catalogR, fromSubjectRow);
+  assert.deepStrictEqual(inputR.input.fixed, [], "nor fixed in the week");
 }

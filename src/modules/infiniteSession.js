@@ -6,7 +6,10 @@
 // countdown running, and racing the page's own renewal got a 401 after which the
 // session most likely was revoked. Instead, shortly before the logout would come, it
 // presses the page's "Tárgy keresése" button; the page renews if needed, then searches.
-// Anyone actually using the page sends requests, so their view is never reloaded.
+// That reloads the subject list and saves the filter fields as they stand. Someone
+// clicking around sends requests and is left alone; someone only reading for 5-10
+// minutes can see the list reload - the price of not being logged out, since the
+// session cookie runs out 15 minutes after the last renewal, reading or not.
 //
 // ponytail: only the course registration page has a measured, harmless trigger;
 // synthetic mouse and key events do not wake Neptun's own renewal. Elsewhere an idle

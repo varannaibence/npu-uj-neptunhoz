@@ -1095,6 +1095,31 @@ module.exports = { run: runEngineChecks };
     assert.strictEqual(timedOut.calls.length, 1, "a timeout may have been processed: never resent");
     assert.strictEqual(quiet.renewals, 0);
 
+    // Stop pressed (or a user switch) while the renewal ran: nothing more is sent.
+    let running = true;
+    const stopping = answers({ [STATUS_KEY]: 401 }, { [STATUS_KEY]: 200 });
+    const stopSession = Object.assign(session(true), {
+      renew: () => {
+        running = false;
+        return Promise.resolve(true);
+      },
+      shouldContinue: () => running,
+    });
+    const halted = await withRenewal(stopping.request, stopSession)();
+    assert.strictEqual(stopping.calls.length, 1, "no resend after Stop");
+    assert.strictEqual(require("../src/modules/rajtolo/engine").isHalted(halted), true);
+    running = true;
+    const beforeSend = answers({ [STATUS_KEY]: 200 });
+    const stopFirst = Object.assign(session(true, true), {
+      renew: () => {
+        running = false;
+        return Promise.resolve(true);
+      },
+      shouldContinue: () => running,
+    });
+    await withRenewal(beforeSend.request, stopFirst)();
+    assert.strictEqual(beforeSend.calls.length, 0, "Stop during the pre-send renewal: never sent");
+
     const expired = answers({ [STATUS_KEY]: 200 });
     const before = session(true, true);
     await withRenewal(expired.request, before)();

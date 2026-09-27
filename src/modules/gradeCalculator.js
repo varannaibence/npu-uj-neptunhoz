@@ -157,8 +157,10 @@ function remember(code, value) {
   return value;
 }
 
-// Up to two closed terms are tried, since the latest may still be waiting for its
-// averages. At most five GETs, once per page load, only when the dialog is opened.
+// Up to three terms are tried, since the latest may still be waiting for its averages
+// (and a localized label may let the current one through). At most seven GETs, only
+// when the dialog is opened; a verdict is kept per Neptun code, a network failure is
+// not, so the next opening tries again.
 async function verifyFormula() {
   const code = utils.getNeptunCode();
   if (verdict && verdict.code === code) {

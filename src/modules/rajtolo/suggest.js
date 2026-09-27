@@ -19,6 +19,7 @@ const logo = require("../../logo");
 const plan = require("./plan");
 const { liveGet, liveSchedule, liveUnschedule, freshenAuth } = require("./net");
 const { STATUS_KEY } = require("./constants");
+const { withRenewal, isHalted } = require("./engine");
 const modal = require("../../modal");
 const { showToast } = require("../../toast");
 const ui = require("./ui");
@@ -53,7 +54,7 @@ function planTargets(currentPlan, baseline) {
   const heldById = new Map();
   const heldByLabel = new Map();
   (baseline || []).forEach(item => {
-    if (item && item.source === "registered" && item.course) {
+    if (isHeld(item)) {
       const typeId = item.course.comparationTypeId || item.course.typeId;
       if (typeId && !heldById.has(`${item.course.subjectId}|${typeId}`)) {
         heldById.set(`${item.course.subjectId}|${typeId}`, item.course.id);
@@ -132,6 +133,13 @@ function planTargets(currentPlan, baseline) {
   return Array.from(targets.values());
 }
 
+// Held means the course row or the planner endpoint says so. A subject row's
+// planner ids are upgraded to "registered" when the subject is, which a merely
+// planned course of a registered subject is not.
+function isHeld(item) {
+  return Boolean(item && item.source === "registered" && item.course && item.origin !== "subject");
+}
+
 function courseLabel(course) {
   return course.code || course.type || "Kurzus";
 }
@@ -143,7 +151,7 @@ function solverInput(targets, catalog, baseline) {
   const swapped = new Set();
   targets.forEach(target => target.groups.forEach(group => group.swap && swapped.add(group.swap)));
   const fixed = (baseline || [])
-    .filter(item => item && item.source === "registered" && item.course && !swapped.has(item.course.id))
+    .filter(item => isHeld(item) && !swapped.has(item.course.id))
     .map(item => ({
       label: [item.subject && item.subject.title, item.course.type || item.course.code].filter(Boolean).join(" – "),
       slots: item.course.slots || [],
@@ -168,6 +176,7 @@ function solverInput(targets, catalog, baseline) {
         type,
         swap: group.swap || null,
         fromPlan: Boolean(target.fromPlan),
+        ranking: group.ranking.slice(),
         current: ranked.length > 0 ? ranked[0].id : null,
         planned: (group.planned || []).slice(),
         courses: new Map(members.map(course => [course.id, course])),
@@ -500,6 +509,11 @@ function injectCss() {
   `);
 }
 
+// A planner or Rajtoló write in flight. Module-level on purpose: the panel (and
+// `view` with it) can be dropped by Angular mid-write, and a reopened panel must
+// neither compute on a half-written planner nor start a second write.
+let writing = false;
+
 // Suggestion state lives here, not on the Rajtoló's: it is thrown away with the panel.
 const view = {
   status: "",
@@ -710,11 +724,7 @@ function renderPanel(state) {
       if (state.running) {
         return;
       }
-      if (ops.length === 0) {
-        applyToRajtolo(state, variant);
-      } else {
-        confirmApply(state, variant, ops, rajtoloChanges);
-      }
+      confirmApply(state, variant, ops, rajtoloChanges);
     });
     actions.appendChild(apply);
   }
@@ -764,7 +774,7 @@ function rajtoloAffected(variant) {
 }
 
 function applyToRajtolo(state, variant) {
-  if (view.busy || view.stale) {
+  if (writing || view.busy || view.stale) {
     return;
   }
   view.undo = {
@@ -778,6 +788,24 @@ function applyToRajtolo(state, variant) {
   ui.render(state);
   view.stale = true;
   setStatus(state, "A Rajtoló sorrendje frissült.");
+}
+
+// The Rajtoló groups the variant reorders, as lines for the confirmation. A course
+// the student never ranked is named as such: the next run would apply for it.
+function rajtoloLines(variant) {
+  return variant.picks
+    .filter(pick => {
+      const meta = view.info.get(pick.groupKey);
+      return pick.changed && pick.courseId && meta && meta.fromPlan && !meta.swap;
+    })
+    .map(pick => {
+      const meta = view.info.get(pick.groupKey);
+      const course = courseOf(pick.groupKey, pick.courseId);
+      const fresh = !meta.ranking.includes(pick.courseId);
+      return `${groupLabelOf(pick.groupKey)}: ${course ? courseLabel(course) : "kurzus"} a sor elejére${
+        fresh ? " (eddig nem volt a sorrendedben, a Rajtoló erre is jelentkezni fog)" : ""
+      }`;
+    });
 }
 
 function describeOp(op) {
@@ -795,24 +823,37 @@ function describeOp(op) {
   return `${label}: ${op.remove.map(code).join(", ")} ki a Tervezőből`;
 }
 
-// Shown before anything is written to Neptun: exactly which planner rows change.
+// Shown before anything is written: exactly which planner rows change in Neptun and
+// which Rajtoló groups are reordered.
 function confirmApply(state, variant, ops, rajtoloChanges) {
+  const lines = rajtoloChanges ? rajtoloLines(variant) : [];
+  const list = (content, items) => {
+    const ul = document.createElement("ul");
+    items.forEach(text => {
+      const li = document.createElement("li");
+      li.textContent = text;
+      ul.appendChild(li);
+    });
+    content.appendChild(ul);
+  };
   modal.open({
     title: "Javaslat alkalmazása",
     small: true,
     build(content) {
-      const intro = document.createElement("p");
-      intro.textContent = "A Neptun Tervezőjében (a szerveren) ezek változnak:";
-      content.appendChild(intro);
-      const list = document.createElement("ul");
-      ops.forEach(op => {
-        const item = document.createElement("li");
-        item.textContent = describeOp(op);
-        list.appendChild(item);
-      });
-      content.appendChild(list);
+      if (ops.length > 0) {
+        const intro = document.createElement("p");
+        intro.textContent = "A Neptun Tervezőjében (a szerveren) ezek változnak:";
+        content.appendChild(intro);
+        list(content, ops.map(describeOp));
+      }
+      if (lines.length > 0) {
+        const intro = document.createElement("p");
+        intro.textContent = "A Rajtoló sorrendjében (a böngésződben):";
+        content.appendChild(intro);
+        list(content, lines);
+      }
       const rest = document.createElement("p");
-      rest.textContent = `${rajtoloChanges ? "A Rajtoló sorrendje is frissül. " : ""}Felvett kurzust ez nem érint, és a panelen visszavonható.`;
+      rest.textContent = "Felvett kurzust ez nem érint. A panelen visszavonható, amíg újra nem számolod.";
       content.appendChild(rest);
     },
     actions: [
@@ -821,7 +862,11 @@ function confirmApply(state, variant, ops, rajtoloChanges) {
         label: "Alkalmazás",
         primary: true,
         onClick() {
-          runApply(state, variant, ops, rajtoloChanges);
+          if (ops.length > 0) {
+            runApply(state, variant, ops, rajtoloChanges);
+          } else {
+            applyToRajtolo(state, variant);
+          }
         },
       },
     ],
@@ -831,6 +876,28 @@ function confirmApply(state, variant, ops, rajtoloChanges) {
 // One planner step against Neptun.
 function liveStep(step) {
   return (step.kind === "add" ? liveSchedule : liveUnschedule)(step.record, step.courseId);
+}
+
+// Planner steps for one student: renewed like the Rajtoló's requests (a 401 on these
+// calls is measured unprocessed - Neptun itself resends it, docs/API.md), and never
+// sent once another user is logged in.
+function plannerSender(code) {
+  const session = {
+    needsRenewal: () => authLeftMs() <= 0,
+    renew: freshenAuth,
+    shouldContinue: () => utils.getNeptunCode() === code,
+  };
+  const renewed = withRenewal(liveStep, session);
+  return step => (session.shouldContinue() ? renewed(step) : Promise.resolve({ halted: true }));
+}
+
+// The planner as Neptun holds it now: true/false for applied or not, null when it
+// could not be read back - never a guess from the old snapshot.
+function plannerReader() {
+  return (checked, applied) =>
+    ensureAuth()
+      .then(() => registrationData.refreshPlanner())
+      .then(ok => (ok ? plannerMatches(checked, applied) : null));
 }
 
 // Sequential, stopping at the first refusal. `send` makes one step's request.
@@ -844,6 +911,9 @@ function runSteps(steps, send = liveStep) {
             return failure;
           }
           return send(step).then(json => {
+            if (json && (json.halted || isHalted(json))) {
+              return { step, message: "másik felhasználó lépett be, a módosítás megállt" };
+            }
             const answer = plannerAnswer(json, STATUS_KEY);
             if (answer.ok) {
               done.push(step);
@@ -885,7 +955,7 @@ function plannerMatches(steps, applied) {
 // needs is taken now, so closing the panel or switching strategy meanwhile changes
 // nothing; the result is read back from Neptun whichever way it went.
 function runApply(state, variant, ops, rajtoloChanges) {
-  if (view.busy || view.stale) {
+  if (writing || view.busy || view.stale) {
     return;
   }
   const info = view.info;
@@ -895,49 +965,55 @@ function runApply(state, variant, ops, rajtoloChanges) {
   const termId = state.plan.termId;
   const steps = plannerSteps(ops);
   const report = text => {
+    writing = false;
     if (generation === view.generation) {
       view.busy = false;
       view.needsReload = true;
       setStatus(state, text);
     } else {
-      showToast(text, "info");
+      showToast(`${text} (A panel közben bezárult, így a visszavonás már nem érhető el.)`, "info");
     }
   };
+  writing = true;
   view.busy = true;
   view.stale = true;
   setStatus(state, "A Tervező módosítása…");
   ensureAuth()
     .then(ok => {
       if (!ok) {
+        writing = false;
         view.busy = false;
         view.stale = false;
         setStatus(state, "A Neptun nem adott friss munkamenetet; kattints valahova a Neptunban, majd próbáld újra.");
         return undefined;
       }
-      const readBack = (checked, applied) =>
-        registrationData.refreshPlanner().then(() => plannerMatches(checked, applied));
-      return applySteps(steps, liveStep, readBack).then(outcome => {
+      return applySteps(steps, plannerSender(code), plannerReader()).then(outcome => {
         if (!outcome.ok) {
           report(
-            outcome.restored
+            outcome.restored === true
               ? `A Tervező nem módosult: ${outcome.failure.message}`
-              : `A Tervező módosítása megszakadt (${outcome.failure.message}), és a Tervező most eltér az eredetitől; nézd meg a Tervezőt.`
+              : outcome.restored === null
+                ? `A Tervező módosítása megszakadt (${outcome.failure.message}), és az állapota nem ellenőrizhető; nézd meg a Tervezőt.`
+                : `A Tervező módosítása megszakadt (${outcome.failure.message}), és a Tervező most eltér az eredetitől; nézd meg a Tervezőt.`
           );
           return;
         }
         const saved = rajtoloChanges ? touchedRankings(state.plan, variant, info) : [];
-        if (rajtoloChanges && utils.getNeptunCode() === code && state.plan.termId === termId) {
+        const rajtoloApplied = rajtoloChanges && utils.getNeptunCode() === code && state.plan.termId === termId;
+        if (rajtoloApplied) {
           state.plan = applyVariant(state.plan, variant, strategy, info);
           ui.persistPlan(state);
           ui.render(state);
         }
         if (generation === view.generation) {
-          view.undo = { code, termId, saved, steps: outcome.done };
+          view.undo = { code, termId, saved: rajtoloApplied ? saved : [], steps: outcome.done };
         }
         report(
-          outcome.matches
-            ? `A Tervező frissült${rajtoloChanges ? ", és a Rajtoló sorrendje is" : ""}. A rács az oldal újratöltése után mutatja.`
-            : "A Neptun elfogadta a módosítást, de a visszaolvasott Tervező eltér; nézd meg a Tervezőt."
+          outcome.matches === true
+            ? `A Tervező frissült${rajtoloApplied ? ", és a Rajtoló sorrendje is" : ""}. A rács az oldal újratöltése után mutatja.`
+            : outcome.matches === null
+              ? "A Neptun elfogadta a módosítást, de a Tervező nem olvasható vissza; nézd meg a Tervezőt."
+              : "A Neptun elfogadta a módosítást, de a visszaolvasott Tervező eltér; nézd meg a Tervezőt."
         );
       });
     })
@@ -948,10 +1024,12 @@ function runApply(state, variant, ops, rajtoloChanges) {
 // go back (later edits stay), and the planner steps are reversed and read back.
 function undoApply(state) {
   const undo = view.undo;
-  if (state.running || view.busy || !undo) {
+  if (writing || state.running || view.busy || !undo) {
     return;
   }
   view.undo = null;
+  // The suggestion on screen was computed for the applied planner: recompute first.
+  view.stale = true;
   if (undo.code !== utils.getNeptunCode() || undo.termId !== state.plan.termId) {
     setStatus(state, "A visszavonás már nem érvényes: más felhasználó vagy félév van betöltve.");
     return;
@@ -966,9 +1044,11 @@ function undoApply(state) {
     return;
   }
   const generation = view.generation;
+  writing = true;
   view.busy = true;
   setStatus(state, "A Tervező visszaállítása…");
   const finish = text => {
+    writing = false;
     if (generation === view.generation) {
       view.busy = false;
       view.needsReload = true;
@@ -977,18 +1057,20 @@ function undoApply(state) {
       showToast(text, "info");
     }
   };
+  const send = plannerSender(undo.code);
+  const readBack = plannerReader();
   ensureAuth()
-    .then(ok => (ok ? runSteps(inverseSteps(undo.steps)) : { failure: { message: "nincs friss munkamenet" } }))
+    .then(ok => (ok ? runSteps(inverseSteps(undo.steps), send) : { failure: { message: "nincs friss munkamenet" } }))
     .then(({ failure }) =>
-      registrationData
-        .refreshPlanner()
-        .then(() =>
-          finish(
-            !failure && plannerMatches(undo.steps, false)
-              ? "Visszaállítva. A rács az oldal újratöltése után mutatja."
+      readBack(undo.steps, false).then(restored =>
+        finish(
+          !failure && restored === true
+            ? "Visszaállítva. A rács az oldal újratöltése után mutatja."
+            : !failure && restored === null
+              ? "A visszaállítás elküldve, de a Tervező nem olvasható vissza; nézd meg a Tervezőt."
               : `A Tervező visszaállítása nem sikerült teljesen${failure ? ` (${failure.message})` : ""}; nézd meg a Tervezőt.`
-          )
         )
+      )
     )
     .catch(() => finish("A Tervező visszaállítása nem sikerült; nézd meg a Tervezőt."));
 }
@@ -1164,12 +1246,19 @@ function setStatus(state, text) {
 // "Tervezőhöz adás" - then loads every target subject's courses afresh, one at a
 // time, and solves. A newer compute or a close abandons an older one.
 function compute(state) {
+  if (writing) {
+    setStatus(state, "Egy módosítás még folyamatban van; várd meg, majd számold újra.");
+    return;
+  }
   const generation = ++view.generation;
   view.loading = true;
   view.result = null;
   view.info = null;
   view.stale = false;
   view.partial = false;
+  // A new suggestion is computed on the current planner; an older undo would no
+  // longer describe it.
+  view.undo = null;
   setStatus(state, "A Tervező frissítése…");
   const auth = ensureAuth();
   auth
@@ -1182,7 +1271,13 @@ function compute(state) {
         setStatus(state, "A Neptun nem adott friss munkamenetet; kattints valahova a Neptunban, majd számold újra.");
         return false;
       }
-      return registrationData.refreshPlanner().then(() => true);
+      return registrationData.refreshPlanner().then(read => {
+        if (!read && generation === view.generation) {
+          view.loading = false;
+          setStatus(state, "A Tervező nem olvasható be friss állapotban; próbáld újra.");
+        }
+        return read;
+      });
     })
     .then(ready => {
       if (!ready || generation !== view.generation) {
@@ -1296,9 +1391,26 @@ function openPanel(state) {
 // layer in step with the grid: a week change rebuilds the columns under it.
 function mount(state) {
   const root = plannerRoot();
+  // The week view has a "Ma" button to sit beside and to clone; the list view has
+  // neither, so there the button goes first in the header's right side, cloned from
+  // the header's own toggle. The list view gets the bar without ghost cards.
+  const right = root && root.querySelector(".timetable-planner__container-right");
   const today = root && root.querySelector(".timetable-planner__today-button");
-  if (today && !document.getElementById(BUTTON_ID)) {
-    const launcher = utils.cloneButton(today);
+  const toggle = root && root.querySelector(".timetable-planner__toggle-button");
+  const reference = today || toggle;
+  const anchor = today || (right && right.firstElementChild);
+  if (reference && anchor && !document.getElementById(BUTTON_ID)) {
+    const launcher = utils.cloneButton(reference);
+    // The toggle's chevron and its "close the planner" label mean nothing here.
+    launcher
+      .querySelectorAll(".neptun-button__postfix-icon, .neptun-button__prefix-icon, mat-icon")
+      .forEach(n => n.remove());
+    launcher.removeAttribute("aria-label");
+    if (!today) {
+      // Outlined like the week view's "Ma", not flat like the toggle it came from.
+      launcher.classList.remove("flat", "small-padding");
+      launcher.classList.add("stroked");
+    }
     launcher.id = BUTTON_ID;
     utils.setButtonLabel(launcher, "Javaslatok");
     utils.markNpu(launcher, "Ütközésmentes órarendjavaslatok");
@@ -1312,7 +1424,7 @@ function mount(state) {
         openPanel(state);
       }
     });
-    today.parentElement.insertBefore(launcher, today);
+    anchor.parentElement.insertBefore(launcher, anchor);
   }
   if (view.result || view.loading || view.busy) {
     if (!document.getElementById(PANEL_ID)) {

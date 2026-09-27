@@ -35,7 +35,8 @@ működik.
 
 ## Funkciók
 
-Minden funkció egyenként kapcsolható a **Neptun PowerUp! beállítások**
+Minden funkció (a lábléc kivételével, mert azon át nyílik a panel) egyenként
+kapcsolható a **Neptun PowerUp! beállítások**
 panelben (a lap alján, **NPU beállítások**); a módosítás a következő
 oldalbetöltéskor lép életbe. A panel minden funkciónál kiírja, hol találod a
 Neptunban; ugyanez áll az alábbi táblázatok **Hol található** oszlopában.
@@ -45,8 +46,11 @@ fölé húzva pedig az „NPU-funkció” felirat. Ami nem ilyen, az a Neptun sa
 
 A **Ki** alapállapot szándékos döntés, nem félkész funkciót jelez. Ezek a
 modulok a Neptun megszokott elrendezését vagy munkafolyamatát változtatják meg,
-illetve extra hálózati kérést indítanak, ezért csak kifejezett bekapcsolás után
-lépnek működésbe.
+vagy a háttérben maguktól indítanak kérést, ezért csak kifejezett bekapcsolás
+után lépnek működésbe. Saját kérést néhány alapból bekapcsolt funkció is küld
+(például a „Mi van ma?” a kezdőlapon, az Átlagkalkulátor és a Javaslatok
+megnyitáskor); hogy pontosan mit, azt a [fejlesztői
+leírás](docs/DEVELOPMENT.md) sorolja fel.
 
 ### Tárgyfelvétel
 

@@ -7,6 +7,8 @@
 - Ha a Neptun egy kérésnél a lejárt token miatt 401-et ad, a Rajtoló friss
   tokent kér a Neptuntól, és a kérést egyszer újraküldi; eddig ez leállította a
   futást. Időtúllépéses kérést továbbra sem küld újra.
+- A Leállítás tokenfrissítés közben is érvényes: ami a frissítésre várt, már nem
+  megy ki. Ugyanez áll, ha közben más felhasználó lép be.
 - Olyan egyetemen, ahol a token nem hordoz munkamenet-azonosítót, a futás már nem
   áll le minden tokenfrissítéskor.
 - Beküldés után a Rajtoló egyszer újra lekéri a tárgy kurzuslistáját, és a
@@ -55,7 +57,10 @@
   sorrendjét is átrendezi. Ha a Neptun egy lépést elutasít, az addigiakat
   visszagörgeti; a panelen visszavonható. Ha egy már felvett kurzus típusából (például laborból)
   teszel egy másikat a Tervezőbe, cserének veszi, és megmondja, megéri-e
-  cserélni. Ha a terved már a legjobb, ezt mondja, és nem ajánl átírást. A
+  cserélni. Ha a terved már a legjobb, ezt mondja, és nem ajánl átírást. A Rajtoló
+  sorrendjének módosítása is megerősítést kér, és külön jelzi, ha egy kurzus eddig
+  nem volt a sorrendedben. Ha a Tervező nem olvasható vissza, ezt mondja ki, nem
+  állítja, hogy nem módosult. A
   javaslat egy keskeny sávban jelenik meg a naptár fölött, a részletek
   lenyithatók. A számolás előtt mindig frissen újraolvassa a Tervezőt, lejárt
   munkamenetnél pedig előbb a Neptunnal frissítteti.
@@ -100,8 +105,9 @@
   tárgyfelvételi oldalon. Nem küld saját frissítő kérést: 12,5 perc tétlenség
   után, vagy ha a legutóbbi tokenfrissítés 10 percnél régebbi, röviddel a
   kiléptetés előtt megnyomja a Neptun „Tárgy keresése” gombját,
-  és a Neptun maga frissít. Aki közben használja az oldalt, annak a nézetét
-  nem tölti újra. A régi módszer nem
+  és a Neptun maga frissít. Ettől a tárgylista újratöltődik; aki közben
+  kattintgat, annál nem nyom, de aki csak olvas, annál előfordulhat. A régi
+  módszer nem
   állította vissza a Neptun kiléptetési számlálóját, és ha egyszerre futott a
   Neptun saját frissítésével, a munkamenet elveszhetett.
 

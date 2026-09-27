@@ -208,6 +208,12 @@ formája `[Ismeretlen]`, mert ezeket csak éles tárgyfelvételi időszakban leh
 felelősen mérni. A Rajtoló ismeretlen vagy időtúllépéses válasznál megáll, nem
 könyvel találgatott sikert, és a már elküldött kérést nem próbálja visszavonni.
 
+`401` (lejárt token) esetén a Rajtoló friss tokent kér a Neptuntól, és a kérést
+**egyszer** újraküldi, hacsak közben le nem állították. Hogy egy 401-es
+`SubjectSignin` semmit sem dolgozott fel, az **következtetés, nem mérés**: a
+JWT-ellenőrzés az action előtt fut, és a Tervező-hívásoknál mértük, hogy a
+Neptun maga is újraküldi a 401-es kérést. Élő tárgyfelvételi időszakban mérendő.
+
 ### `GET SubjectApplication/ScheduledSubjectsWithScheduledCourses` — [Mért]
 
 **Használat:** a fejléc és a Rajtoló kredit-előrejelzésének forrása.
@@ -409,9 +415,9 @@ A mért válaszban `accessToken` és `sessionTimeoutInMinutes` szerepel. A token
   köti, annak a `SessionId`-ra kell támaszkodnia, nem egy újabb `UserInfo`-ra.
 - Nem minden saját API-kérés visz `Authorization`-t: betöltéskor a
   `GET General/GetHWebErrorReportingEmailSystemParameter` fejléc nélkül megy, és
-  200-at kap. Fejléc nélküli kérés tehát nem jelent kilépést. Az NPU ezt csak az
-  `Account/*` kéréseknél (pl. `Authenticate`) és a `/login` útvonalon veszi
-  annak.
+  200-at kap. Fejléc nélküli kérés tehát nem jelent kilépést. Az NPU
+  munkamenet-határnak csak a fejléc nélküli `Account/Authenticate`-et és a
+  `/login` útvonalat veszi (a kijelentkezés mért módon nem küld kérést).
 - Oldal-újratöltéskor a Neptun nem kér új tokent: a még élő tokent használja
   tovább (a mérésben 186 mp-cel a lejárata előtt).
 - A fejléc „Munkamenet lejárata” számlálója bármely API-kérésnél 15 percre

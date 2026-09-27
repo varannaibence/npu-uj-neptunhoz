@@ -52,6 +52,9 @@ async function runSubject(subject, deps) {
       return { kind: "stopped" };
     }
     const coursesBody = await deps.get(subject);
+    if (isHalted(coursesBody)) {
+      return { kind: "stopped" };
+    }
     const catalog = validateCourseList(coursesBody);
     if (catalog.kind !== "ok") {
       return catalog;
@@ -65,6 +68,9 @@ async function runSubject(subject, deps) {
       return { kind: "stopped" };
     }
     const body = await deps.post(subject, courseIds);
+    if (isHalted(body)) {
+      return { kind: "stopped" };
+    }
     const result = classifyResponse(body);
     if (result.kind === "submitted") {
       return verifySubmission(subject, courseIds, deps);
@@ -241,6 +247,8 @@ function scheduleRun(targetEpochMs, plan, controller, callbacks) {
       // No header at all is a token a 401 has just retired.
       needsRenewal: () => !interceptor.getAuthHeader() || tokenExpired(interceptor.getAuthTiming(), Date.now()),
       renew: freshenAuth,
+      // Stop - pressed by the user or by a user switch - is honoured after every wait.
+      shouldContinue: () => !controller.stopped,
     };
     const fresh = request => withRenewal(request, session);
     const deps = {
@@ -265,21 +273,38 @@ function scheduleRun(targetEpochMs, plan, controller, callbacks) {
   armStart();
 }
 
-// Wraps a live request: renews a missing or expired token first, and answers a 401 -
-// the server refused the token, so it processed nothing - with one renewal and one
-// resend. Anything else, a timeout included, comes back as it came: a request that
-// may have been processed is never sent again (AGENTS.md invariant 6).
+// What a wrapped request answers when Stop came while it waited for a renewal: it was
+// never sent. The run reads it as "stopped".
+const HALTED = "__npuHalted";
+function isHalted(body) {
+  return Boolean(body && body[HALTED]);
+}
+
+// Wraps a live request: renews a missing or expired token first, and answers a 401
+// with one renewal and one resend. That a 401 means nothing was processed is an
+// inference, not a measurement for SubjectSignin: JWT validation rejects before the
+// action runs (measured only for the planner calls, docs/API.md). Anything else, a
+// timeout included, comes back as it came: a request that may have been processed is
+// never sent again (AGENTS.md invariant 6). A renewal can take seconds, so Stop is
+// checked again after each one, and a stopped run sends nothing more.
 function withRenewal(request, session) {
+  const halted = () => typeof session.shouldContinue === "function" && !session.shouldContinue();
   return async (...args) => {
     if (session.needsRenewal()) {
       await session.renew();
+      if (halted()) {
+        return { [HALTED]: true };
+      }
     }
     const response = await request(...args);
     if (!response || response[STATUS_KEY] !== 401 || !(await session.renew())) {
       return response;
     }
+    if (halted()) {
+      return { [HALTED]: true };
+    }
     return request(...args);
   };
 }
 
-module.exports = { runSubject, runPlan, summarize, createController, scheduleRun, startTimeout, withRenewal };
+module.exports = { runSubject, runPlan, summarize, createController, scheduleRun, startTimeout, withRenewal, isHalted };
