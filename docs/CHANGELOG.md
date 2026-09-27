@@ -2,6 +2,8 @@
 
 ## Következő kiadás
 
+## 3.1.3 — 2026. szept. 27. <a name="v3.1.3"></a>
+
 **Rajtoló**
 
 - Javítva: ha az új félév tárgylistája üres volt, az előző félév terve
