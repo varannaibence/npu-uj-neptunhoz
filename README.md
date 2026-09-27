@@ -148,6 +148,16 @@ A legutóbbi három stabil kiadás. A **Telepítés** link Tampermonkey mellett
 közvetlenül telepíthető.
 
 <details open>
+<summary><strong>v3.1.2</strong> · 2026. szept. 27.</summary>
+
+- Frissítés jelzése: az „Újdonságok” link a változásnaplóban az új verzió
+  teljes leírására visz; eddig a GitHub release-oldalára, ahol csak a
+  beolvasztott PR-ek listája látszott.
+
+[Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.1.2) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.1.2/npu.user.js)
+
+</details>
+<details>
 <summary><strong>v3.1.1</strong> · 2026. szept. 27.</summary>
 
 **Órarendjavaslatok**
@@ -305,18 +315,6 @@ közvetlenül telepíthető.
   áthelyezte a sorokat, ami a billentyűzetfókuszt is elvihette. Javítva.
 
 [Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.1.0) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.1.0/npu.user.js)
-
-</details>
-<details>
-<summary><strong>v3.0.4</strong> · 2026. szept. 26.</summary>
-
-- Frissítés jelzése: amikor a Tampermonkey frissíti az NPU-t, a következő
-  betöltéskor egy értesítés jelzi az új verziót, az „Újdonságok” linkkel. Csak
-  egyszer jelenik meg, első telepítéskor nem. A beállításokban kikapcsolható.
-- A frissítési és hibabejelentő linkek az új repócímre (`npu-uj-neptunhoz`)
-  mutatnak; eddig a régi cím átirányítása miatt működtek.
-
-[Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.0.4) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.0.4/npu.user.js)
 
 </details>
 

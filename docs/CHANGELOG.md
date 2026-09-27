@@ -2,6 +2,8 @@
 
 ## Következő kiadás
 
+## 3.1.2 — 2026. szept. 27. <a name="v3.1.2"></a>
+
 - Frissítés jelzése: az „Újdonságok” link a változásnaplóban az új verzió
   teljes leírására visz; eddig a GitHub release-oldalára, ahol csak a
   beolvasztott PR-ek listája látszott.
