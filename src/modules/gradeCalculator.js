@@ -36,6 +36,7 @@ const meta = {
   id: "gradeCalculator",
   group: "daily",
   name: "Átlagkalkulátor",
+  where: "Tárgyak › Felvett tárgyak: „Átlagkalkulátor” gomb a szűrő mellett",
   description:
     "A Felvett tárgyak oldalon kiszámolja a várt jegyekből a súlyozott átlagot és a kreditindexeket. Előbb egy lezárt féléven ellenőrzi, hogy a képlet egyezik-e a Neptunéval.",
 };

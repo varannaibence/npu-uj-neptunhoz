@@ -14,6 +14,7 @@ const meta = {
   id: "updateNotice",
   group: "comfort",
   name: "Frissítés jelzése",
+  where: "Frissítés utáni első betöltéskor, felugró értesítésben",
   description: "Frissítés után egyszer jelzi az új verziót, az újdonságok linkjével.",
 };
 

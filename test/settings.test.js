@@ -267,5 +267,9 @@ module.exports = { run };
   modulePaths.forEach(modulePath => {
     const { meta } = require(path.join(__dirname, "../src", modulePath));
     assert.ok(known.has(meta.group), `${meta.id} belongs to a panel section`);
+    // The panel tells where each feature shows up; a new one must say it too.
+    [meta].concat(meta.options || []).forEach(entry => {
+      assert.ok(typeof entry.where === "string" && entry.where.trim(), `${meta.id}.${entry.id} says where it is`);
+    });
   });
 }

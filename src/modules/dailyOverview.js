@@ -44,24 +44,28 @@ const meta = {
   id: "dailyOverview",
   group: "daily",
   name: "Mi van ma?",
+  where: "Kezdőlap, a tetején",
   description:
     "A kezdőlap tetején, a Neptun kártyáival egyező kártyákon: mai órák, befizetési határidők, tárgyfelvételi időszakok.",
   options: [
     {
       id: "dueCard",
       name: "Befizetendő tételek",
+      where: "Kezdőlap: a „Befizetendő” kártya",
       description: "Kártya a befizetendő tételekkel, összeggel és határidővel.",
       defaultEnabled: true,
     },
     {
       id: "periodsCard",
       name: "Időszakok",
+      where: "Kezdőlap: az „Időszakok” kártya",
       description: "Kártya a futó és 45 napon belül nyíló tárgy- és vizsgajelentkezési időszakokkal.",
       defaultEnabled: true,
     },
     {
       id: "reminders",
       name: "Napi értesítés",
+      where: "Bejelentkezés után, felugró értesítésben",
       description:
         "Bejelentkezés után naponta egyszer értesít, ha egy befizetés vagy időszak 3 napon belül esedékes, vagy egy befizetés lejárt.",
       defaultEnabled: true,

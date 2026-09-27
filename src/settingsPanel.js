@@ -80,6 +80,8 @@ const CSS = `
 .npu-s__title { display: block; font-weight: 600; font-size: 15px; line-height: 1.3; }
 .npu-s__row--option .npu-s__title { font-size: 14px; }
 .npu-s__desc { display: block; font-size: 13px; line-height: 1.4; opacity: .72; margin-top: 3px; }
+.npu-s__where { display: block; font-size: 12px; line-height: 1.4; opacity: .6; margin-top: 3px; }
+.npu-s__where b { font-weight: 700; }
 .npu-s__switch {
   position: relative; flex: 0 0 auto; width: 40px; height: 24px; margin-top: 1px; padding: 0;
   border: 0; border-radius: 12px; background: #c4c9d6; cursor: pointer; transition: background-color .2s ease;
@@ -165,7 +167,7 @@ function isOn(input) {
 }
 
 // One switch row. The whole row is the click target; the switch carries the state.
-function switchRow(doc, { name, description, checked, disabled, option }, onToggle) {
+function switchRow(doc, { name, description, where, checked, disabled, option }, onToggle) {
   const item = el(doc, "div", option ? "npu-s__row npu-s__row--option" : "npu-s__row");
   const text = el(doc, "span", "npu-s__text");
   const title = el(doc, "span", "npu-s__title", name);
@@ -178,6 +180,16 @@ function switchRow(doc, { name, description, checked, disabled, option }, onTogg
     desc.id = `npu-s-desc-${++idSequence}`;
     input.setAttribute("aria-describedby", desc.id);
     text.appendChild(desc);
+  }
+  // Where on Neptun's pages the feature shows up, so a switched-on one can be found.
+  if (where) {
+    const place = el(doc, "span", "npu-s__where");
+    place.appendChild(el(doc, "b", null, "Hol: "));
+    place.appendChild(doc.createTextNode(where));
+    place.id = `npu-s-where-${++idSequence}`;
+    const described = input.getAttribute("aria-describedby");
+    input.setAttribute("aria-describedby", described ? `${described} ${place.id}` : place.id);
+    text.appendChild(place);
   }
   item.appendChild(text);
   item.appendChild(input);
@@ -207,6 +219,7 @@ function moduleRows(doc, module, flags, editable, onChange) {
     {
       name: meta.required ? `${meta.name} (mindig bekapcsolva)` : meta.name,
       description: meta.description,
+      where: meta.where,
       checked: settings.isEnabled(module, flags),
       disabled: Boolean(meta.required) || !editable,
     },
@@ -225,6 +238,7 @@ function moduleRows(doc, module, flags, editable, onChange) {
       {
         name: option.name,
         description: option.description,
+        where: option.where,
         checked: settings.isOptionEnabled(module, option, flags),
         disabled: !isOn(main.input) || !editable,
         option: true,

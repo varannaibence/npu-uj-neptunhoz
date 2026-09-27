@@ -17,6 +17,7 @@ const meta = {
   id: "backToLastPage",
   group: "comfort",
   name: "Vissza a legutóbbi oldalra",
+  where: "Bejelentkezés után, felugró értesítésben",
   description: "Bejelentkezés után felajánlja, hogy visszavigyen oda, ahol jártál.",
 };
 

@@ -28,6 +28,7 @@ const meta = {
   id: "infiniteSession",
   group: "comfort",
   name: "Munkamenet életben tartása",
+  where: "Tárgyak › Tárgyfelvétel, a háttérben (nincs saját gombja)",
   description:
     "A tárgyfelvételi oldalon tétlen fülnél is megakadályozza a kiléptetést: mielőtt a munkamenet lejárna (12,5 perc tétlenség, vagy 10 perce nem frissült token után), megnyomja a Neptun saját Tárgy keresése gombját. Más oldalon a munkamenet lejárhat.",
   defaultEnabled: false,

@@ -75,6 +75,15 @@
 
 **Egyéb**
 
+- A beállítások panel minden funkciónál és alopciónál kiírja, hol található a
+  Neptunban (például „Hol: Tárgyak › Tárgyfelvétel: a lenyitott tárgy
+  kurzusainál”); a README táblázatai is kaptak egy **Hol található** oszlopot.
+- Táblázatos kurzuslista: öt átláthatóbb oszlop (az állapot a kód mellett, nap-chip
+  és terem az időpontnál, telítettségi sáv a létszám alatt, az ütköző tárgy neve),
+  a felvett és a felvehető sorok színes szegélyt kapnak, a betelt és ütköző sorok
+  halványabbak, a szakaszcímek számláló chipeket.
+- Az NPU saját ablakai akkor is kitöltik a helyüket, ha előtte a Neptun egy kis
+  ablaka nyílt meg; a rövid megerősítések keskenyebb ablakban jelennek meg.
 - Javítva: bejelentkezés után az első kérés törölte a Neptun-kódot, ezért a
   Rajtoló terve, a „Mi van ma?” kártyái és a napi értesítés nem működtek az oldal
   újratöltéséig.
@@ -89,7 +98,8 @@
 
 - Munkamenet életben tartása: már tétlen fülnél is működik, de csak a
   tárgyfelvételi oldalon. Nem küld saját frissítő kérést: 12,5 perc tétlenség
-  után, röviddel a kiléptetés előtt megnyomja a Neptun „Tárgy keresése” gombját,
+  után, vagy ha a legutóbbi tokenfrissítés 10 percnél régebbi, röviddel a
+  kiléptetés előtt megnyomja a Neptun „Tárgy keresése” gombját,
   és a Neptun maga frissít. Aki közben használja az oldalt, annak a nézetét
   nem tölti újra. A régi módszer nem
   állította vissza a Neptun kiléptetési számlálóját, és ha egyszerre futott a

@@ -60,6 +60,7 @@ const meta = {
   id: "occupancy",
   group: "registration",
   name: "Férőhely és betelt állapot",
+  where: "Tárgyak › Tárgyfelvétel: a lenyitott tárgy kurzusainál, és a „Betelt kurzusok hátra” gomb a szűrők mellett",
   description:
     "Férőhelyet és betelt/várólista állapotot ír a betöltött kurzusokra, és előre rendezi azokat, amikre még lehet jelentkezni.",
 };

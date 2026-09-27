@@ -63,6 +63,7 @@ const meta = {
   id: "courseConflictHints",
   group: "registration",
   name: "Órarend és ütközések a kurzusoknál",
+  where: "Tárgyak › Tárgyfelvétel: a lenyitott tárgy kurzusainál",
   description:
     "Kiírja a kurzus termét és minden óraalkalmát, megnevezi az ütköző tárgyat, ha " +
     "van ilyen, és jelzi, ha ezt egyelőre nem tudja biztosan eldönteni.",
@@ -76,6 +77,7 @@ const meta = {
     {
       id: "noteSlots",
       name: "Időpont a megjegyzésből",
+      where: "Tárgyak › Tárgyfelvétel: a megjegyzésben megadott időpontú kurzusoknál",
       description:
         "Ha a kurzusnak nincs órarendi adata, a megjegyzésből olvassa ki a napot, időt és termet " +
         "(pl. „Hétfő 14-15, A1/216”), és az ütközésvizsgálat is számol vele.",

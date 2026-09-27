@@ -40,6 +40,7 @@ const meta = {
   id: "rajtolo",
   group: "rajtolo",
   name: "Rajtoló",
+  where: "Tárgyak › Tárgyfelvétel: „Rajtoló” gomb a szűrők mellett, „Rajtolóhoz” kapcsoló a kurzusoknál",
   description: "Ütemezett tárgyfelvétel: saját tárgy- és kurzussorrend, amit a megadott időpontban sorban beküld.",
   // Only the credit forecast needs this; the run itself does not.
   needs: [
@@ -52,6 +53,7 @@ const meta = {
     {
       id: "suggestions",
       name: "Órarendjavaslatok",
+      where: "Tárgyak › Tárgyfelvétel: a lap alján nyíló Órarendtervező fejlécében, „Javaslatok” gomb",
       description:
         "„Javaslatok” gomb a Neptun Órarendtervezőjében: ütközésmentes kurzusválasztást keres a felvett órák mellé (kevesebb lyukas óra, több szabad nap vagy legkevesebb csere), előnézetben megmutatja a heti rácson, és kérésre átrendezi a Rajtoló sorrendjét. Megerősítés után a Neptun Tervezőjében is a javasolt kurzusokra cseréli a tervezetteket.",
       defaultEnabled: true,

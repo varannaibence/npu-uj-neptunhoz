@@ -23,6 +23,7 @@ const meta = {
   id: "pagination",
   group: "registration",
   name: "Hosszabb listák",
+  where: "Tárgyak › Tárgyfelvétel: a tárgylista",
   description: "Egy lapon jóval több sort tölt be, így kevesebbet kell lapozni.",
 };
 

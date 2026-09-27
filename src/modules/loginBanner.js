@@ -16,6 +16,7 @@ const meta = {
   id: "loginBanner",
   group: "comfort",
   name: "Jelzés a bejelentkező oldalon",
+  where: "A bejelentkező oldalon, a belépés alatt",
   description: "Kiírja az NPU nevét és verzióját a bejelentkező oldalon.",
 };
 

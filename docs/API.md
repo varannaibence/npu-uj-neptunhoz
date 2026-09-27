@@ -450,7 +450,9 @@ Az NPU nem küld saját `GetNewTokens`-t. A tárgyfelvételi oldalon a Neptun sa
 „Tárgy keresése” gombját nyomja meg, és így a Neptun maga frissít. Az élesített
 Rajtoló akkor, ha a token 10 percnél régebben készült. A bekapcsolt
 `infiniteSession` akkor, ha az oldal 12,5 perce nem küldött saját API-kérést,
-vagyis röviddel a kiléptetés előtt.
+vagy ha a legutóbbi tokenfrissítés 10 percnél régebbi és a token lejárt: a
+munkamenet-süti a frissítéstől számít 15 percet, ami a legutóbbi kérésnél
+korábbi is lehet. (Élőben látva: 6,5 perc oldalcsendnél, 10 perces tokennél nyomott.)
 
 ## Naptár, befizetendő tételek és törzslap — [Mért, unideb, 2026-09-26]
 

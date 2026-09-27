@@ -32,6 +32,7 @@ const meta = {
   id: "creditBreakdown",
   group: "comfort",
   name: "Kreditbontás a fejlécben",
+  where: "Tárgyak › Tárgyfelvétel: a fejléc „Felvett kredit” kártyája",
   description: "A felvett kreditet tárgytípusonként bontja a Neptun saját kártyáján.",
   // This module issues the ScheduledSubjectsWithScheduledCourses GET that two other
   // modules only listen to. Switching it off silently takes their data with it, so

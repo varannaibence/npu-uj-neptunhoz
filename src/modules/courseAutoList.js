@@ -13,6 +13,7 @@ const meta = {
   id: "courseAutoList",
   group: "registration",
   name: "Tárgylista automatikus betöltése",
+  where: "Tárgyak › Tárgyfelvétel: az oldal megnyitásakor",
   description: "Megnyomja helyetted a „Tárgy keresése” gombot a tárgyfelvételi oldalon.",
   defaultEnabled: false,
 };

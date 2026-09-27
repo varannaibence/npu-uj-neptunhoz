@@ -28,6 +28,12 @@ const meta = {
   id: "példa",
   name: "Rövid, felhasználói név",
   description: "Egy mondat arról, mit csinál. Ezt olvassa a felhasználó.",
+  // Hol jelenik meg a Neptunban, a menü neveivel („Tárgyak › Tárgyfelvétel: …”).
+  // A panel „Hol:” sorként mutatja; a teszt minden modulnál és alopciónál
+  // megköveteli.
+  where: "Tárgyak › Tárgyfelvétel: gomb a szűrők mellett",
+  // Csoport a panelen és a README-ben: registration, rajtolo, daily, comfort.
+  group: "registration",
 };
 
 // Fusson-e ezen az oldalon? Olcsó és szinkron legyen.
