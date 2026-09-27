@@ -433,6 +433,14 @@ try {
     "a planner response that won the race is adopted for the matching term"
   );
   assert.strictEqual(registrationData.getSnapshot().baseline[0].course.id, "c-early-planner");
+
+  // An empty list of another term names no GUID; the numeric term alone moves the layer.
+  registrationData.ingestSubjects(
+    { data: [], notification: [] },
+    { url: "/hallgato_ng/api/SubjectApplication/SchedulableSubjects?request.termId=43" }
+  );
+  assert.strictEqual(registrationData.getSnapshot().termId, null, "the old term is dropped");
+  assert.strictEqual(registrationData.getSnapshot().baseline.length, 0, "and its planner with it");
 } finally {
   if (typeof previousLocation === "undefined") {
     delete global.location;

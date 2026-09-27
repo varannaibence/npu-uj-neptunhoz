@@ -146,6 +146,27 @@ function optionalCourseFields(row) {
   };
 }
 
+// Seat state from `isFull` + `willBeOnWaitingList` alone (invariant 5): `isFull` means
+// "you cannot apply at all", and a course at its limit with a waiting list measures
+// isFull:false + willBeOnWaitingList:true. Never promoted to "free" on a missing
+// forecast, and never read from `isOnWaitingList` (the student's own status). Pure.
+//   free     - a seat is yours on registering
+//   waitlist - you can apply, but you are queueing
+//   full     - you cannot apply
+//   null     - not measured
+function seatState(course) {
+  if (!course || typeof course.isFull !== "boolean") {
+    return null;
+  }
+  if (course.isFull) {
+    return "full";
+  }
+  if (typeof course.willBeOnWaitingList !== "boolean") {
+    return null;
+  }
+  return course.willBeOnWaitingList ? "waitlist" : "free";
+}
+
 // Lifted from courseConflictHints.collectCourses, plus optionalCourseFields above.
 function collectCourses(json, into) {
   const map = into || new Map();
@@ -330,6 +351,15 @@ function buildBaseline(subjects, courses, plannerEntries) {
   });
 
   return Array.from(byCourse.values());
+}
+
+// Held or planned courses without a readable time, other than `exceptId`: a clash
+// against them is never checked, so "no clash" may only be claimed as "no KNOWN clash"
+// while any is there. Pure.
+function untimedBaseline(baseline, exceptId) {
+  return (baseline || []).filter(
+    entry => entry && entry.course && entry.course.id !== exceptId && !(entry.course.slots || []).length
+  );
 }
 
 // --- mutable snapshot state ---------------------------------------------------------
@@ -593,10 +623,16 @@ function isSuccessfulCollection(json, status) {
 function ingestSubjects(json, info) {
   const meta = info || {};
   const termGuid = termIn(json);
+  const numericTermId = queryValue(meta.url, "request.termId");
   if (!termGuid) {
+    // An empty list names no term GUID: only the request's numeric term shows that the
+    // page moved to another term, whose planner must not be read as the old one's.
+    if (numericTermId && activeNumericTermId && numericTermId !== activeNumericTermId) {
+      reset(null, numericTermId);
+      notify();
+    }
     return;
   }
-  const numericTermId = queryValue(meta.url, "request.termId");
   if (activeTermId !== termGuid) {
     reset(termGuid, numericTermId || activeNumericTermId);
   } else if (numericTermId && !activeNumericTermId) {
@@ -731,6 +767,8 @@ module.exports = {
   collectCourses,
   collectPlannerCourses,
   buildBaseline,
+  untimedBaseline,
+  seatState,
   // Exposed so a test can drive a reset or a merge without a fake XHR or a fake
   // global `location`: each takes its route/URL context as an explicit argument
   // instead of asking the real router/interceptor for it.

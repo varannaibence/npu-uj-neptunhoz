@@ -494,6 +494,42 @@ async function runToggleStatePersistenceCheck() {
   }
 }
 
+// Another tab's save made after this tab loaded must survive this tab's next save.
+async function runCrossTabSaveCheck() {
+  const previousGM = global.GM;
+  const previousLocation = global.location;
+  const values = { data: JSON.stringify({ version: 1, users: {} }) };
+  global.GM = {
+    async getValue(key) {
+      return values[key];
+    },
+    async setValue(key, value) {
+      values[key] = value;
+    },
+  };
+  global.location = { host: "example.com" };
+  try {
+    await storage.initialize();
+    // The other tab saves a plan after this one has loaded.
+    values.data = JSON.stringify({ version: 1, users: {}, otherTab: "plan" });
+    await storage.set("lastPage", "/hallgato_ng/x");
+    const saved = JSON.parse(values.data);
+    assert.strictEqual(saved.otherTab, "plan", "a save never writes back another tab's key from a stale copy");
+    assert.strictEqual(saved.lastPage, "/hallgato_ng/x");
+  } finally {
+    if (typeof previousGM === "undefined") {
+      delete global.GM;
+    } else {
+      global.GM = previousGM;
+    }
+    if (typeof previousLocation === "undefined") {
+      delete global.location;
+    } else {
+      global.location = previousLocation;
+    }
+  }
+}
+
 // The engine checks are async (runSubject/runPlan await their injected deps), so they
 // run last and the success line waits for them. A rejection must exit non-zero -
 
@@ -506,6 +542,7 @@ async function run() {
   await runStorageCredentialCleanupCheck();
   await runStorageSaveAwaitCheck();
   await runToggleStatePersistenceCheck();
+  await runCrossTabSaveCheck();
 }
 
 module.exports = { run };

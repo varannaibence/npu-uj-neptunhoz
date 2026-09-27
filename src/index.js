@@ -29,10 +29,11 @@ interceptor.install();
 router.install();
 
 // UserInfo runs on every page load, Authenticate only on a fresh login.
-// Subscribing to both covers the reload case too.
-interceptor.onResponse(/^(UserInfo|Account\/Authenticate)$/, json => {
+// Subscribing to both covers the reload case too. A late answer from before a logout
+// or another login would put the previous user's code back.
+interceptor.onResponse(/^(UserInfo|Account\/Authenticate)$/, (json, info) => {
   const code = utils.findProp(json, "neptunCode");
-  if (code) {
+  if (code && interceptor.isCurrentSession(info && info.authHeader)) {
     utils.setNeptunCode(code);
   }
 });

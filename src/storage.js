@@ -5,6 +5,9 @@ let data = {};
 let initialized = false;
 let initializationPromise = null;
 let pendingMutations = [];
+// This tab's changes not yet written. Replayed onto a fresh read at every save, so a
+// save never writes back another tab's keys from this tab's stale copy.
+let unsavedMutations = [];
 let writeQueue = Promise.resolve();
 
 function gmGet(key) {
@@ -95,6 +98,30 @@ function saveNow() {
   return gmSet("data", JSON.stringify(data));
 }
 
+// Another tab may have saved since this one loaded: re-read the store, put only this
+// tab's own changes on top, and write that. Also brings the other tab's keys into
+// this tab's copy.
+// ponytail: read-then-write, not atomic; two tabs saving within the same few ms can
+// still race. GM_addValueChangeListener if that ever shows up.
+async function saveMerged() {
+  const mine = unsavedMutations;
+  unsavedMutations = [];
+  if (mine.length === 0) {
+    // An earlier save in the queue already wrote them.
+    return;
+  }
+  try {
+    const loaded = JSON.parse(await gmGet("data"));
+    if (loaded && typeof loaded === "object") {
+      mine.forEach(({ keys, value }) => utils.deepSetProp(loaded, keys, value));
+      data = loaded;
+    }
+  } catch (e) {
+    // Unreadable: this tab's copy is still the best there is.
+  }
+  return saveNow();
+}
+
 // Serialize every post-initialization save. A rejected write must not poison the
 // queue forever, while the returned Promise still reports that individual error.
 function queueSave() {
@@ -102,7 +129,7 @@ function queueSave() {
   const operation = writeQueue
     .catch(() => {})
     .then(() => waitForInitialization || undefined)
-    .then(() => saveNow());
+    .then(() => saveMerged());
   operation.catch(() => {});
   writeQueue = operation;
   return operation;
@@ -127,7 +154,11 @@ function set(...keysAndValue) {
   // pending mutation itself; returning that Promise keeps callers awaitable
   // without creating a queue cycle. Resolves true once written: GM.setValue itself
   // resolves undefined, which read as a failed save ("nem menthető") every time.
-  return (initializationPromise || queueSave()).then(() => true);
+  if (initializationPromise) {
+    return initializationPromise.then(() => true);
+  }
+  unsavedMutations.push({ keys: keys.slice(), value });
+  return queueSave().then(() => true);
 }
 
 // Gets the specified property or all data of the current user

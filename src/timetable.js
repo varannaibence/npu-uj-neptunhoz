@@ -103,6 +103,13 @@ function courseSlots(row, infos) {
   return slots.length > 0 || !noteSlotsEnabled ? slots : slotsFromNote(row && row.note);
 }
 
+// 960 -> "16:00". Shared by every view that prints a slot.
+function formatClock(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
 // Half-open intervals: a class ending at 18:00 and another beginning at 18:00 are
 // back-to-back, not a conflict.
 function slotsOverlap(a, b) {
@@ -149,6 +156,7 @@ function findPlanConflicts(picks) {
 
 module.exports = {
   toMinutes,
+  formatClock,
   normaliseSlot,
   slotsFromNote,
   setNoteSlotsEnabled,

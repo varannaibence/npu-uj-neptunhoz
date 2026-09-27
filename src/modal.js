@@ -11,6 +11,7 @@
 //      cloned from a live one - the clone carries the hash along.
 const utils = require("./utils");
 const tokens = require("./neptunTokens");
+const { showToast } = require("./toast");
 
 const OVERLAY_CLASS = "npu-overlay";
 const DIALOG_CLASS = "npu-dialog";
@@ -225,10 +226,17 @@ let openDialog = null;
 // rightmost last. Closing is deliberately easy - Escape, the X, the backdrop - since
 // a user trapped in a popup our script drew would rightly be alarmed.
 //
-// Only one NPU dialog exists at a time; opening a second closes the first.
+// Only one NPU dialog exists at a time; opening a second closes the first - unless
+// the first says it is busy (`options.busy()` returns why, e.g. an armed Rajtoló that
+// closing would stop). Then the new one is refused with that reason, and null returned.
 function open(options) {
   injectCss();
   if (openDialog) {
+    const busy = openDialog.busy && openDialog.busy();
+    if (busy) {
+      showToast(busy, "warn");
+      return null;
+    }
     openDialog.close();
   }
 
@@ -402,7 +410,7 @@ function open(options) {
 
   // Handed back so a caller can relabel a footer action while the dialog is open -
   // the Rajtoló's one button is both Start and Stop.
-  const handle = { close, content: contentBody, dialog, buttons };
+  const handle = { close, content: contentBody, dialog, buttons, busy: options.busy };
   openDialog = handle;
   return handle;
 }

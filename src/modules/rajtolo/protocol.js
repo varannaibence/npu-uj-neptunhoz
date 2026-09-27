@@ -69,18 +69,33 @@ function validateCourseList(body) {
   return { kind: "ok" };
 }
 
-// One courseId per group, highest-ranked first, skipping anything full, already held
-// or already queued on. Null as soon as one group has nothing left to offer.
+// Whether the student already holds, or is queued on, a ranked course of this subject.
+// Picking the next-ranked course then would send a swap nobody asked for, so the run
+// leaves such a subject alone.
+function holdsRankedCourse(groups, courseIndex) {
+  return groups.some(group =>
+    group.ranking.some(id => {
+      const course = courseIndex.get(id);
+      return Boolean(course) && (course.isSigned === true || course.isOnWaitingList === true);
+    })
+  );
+}
+
+// One courseId per group: the highest-ranked with a seat, else the highest-ranked
+// that only queues (invariant 5: a waiting list is not a seat), skipping anything
+// full. Null as soon as one group has nothing left to offer, or when the student
+// already holds a ranked course of this subject.
 function chooseCombination(groups, courseIndex, excluded) {
+  if (holdsRankedCourse(groups, courseIndex)) {
+    return null;
+  }
   const courseIds = [];
   for (const group of groups) {
-    const pick = group.ranking.find(id => {
-      if (excluded.has(id)) {
-        return false;
-      }
+    const open = group.ranking.filter(id => {
       const course = courseIndex.get(id);
-      return Boolean(course) && course.isFull === false && course.isSigned !== true && course.isOnWaitingList !== true;
+      return !excluded.has(id) && Boolean(course) && course.isFull === false;
     });
+    const pick = open.find(id => courseIndex.get(id).willBeOnWaitingList !== true) || open[0];
     if (!pick) {
       return null;
     }
@@ -252,6 +267,7 @@ const STATUS_LABELS = {
   requirement: () => "Követelmény nem teljesült",
   full: () => "Betelt (a próbálkozások kimerültek)",
   exhausted: () => "Nincs elérhető kurzus",
+  held: () => "Már van felvett vagy várólistás kurzusod ebből a tárgyból — kihagyva, ellenőrizd a Neptunban",
   unconfigured: () => "Nincs rangsorolva kurzus ehhez a tárgyhoz — kihagyva",
   notOpen: () => "Még nincs tárgyjelentkezési időszak",
   unknown: () => "Ismeretlen hiba — a teljes futás leállt",
@@ -264,7 +280,7 @@ function toastTone(kind) {
   if (kind === "registered") {
     return "ok";
   }
-  return kind === "submitted" || kind === "waitlisted" ? "warn" : "error";
+  return kind === "submitted" || kind === "waitlisted" || kind === "held" ? "warn" : "error";
 }
 
 function statusLabel(kind, message) {
@@ -281,6 +297,7 @@ module.exports = {
   classifyResponse,
   validateCourseList,
   chooseCombination,
+  holdsRankedCourse,
   submissionOutcome,
   msUntilTarget,
   sessionChore,
