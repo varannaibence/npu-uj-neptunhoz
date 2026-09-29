@@ -174,6 +174,11 @@ function onAuthChange(fn) {
 // every response carries. rajtolo schedules against this rather than the local
 // clock, which can be seconds to minutes out.
 let serverOffsetMs = null;
+// `Date` has whole seconds and arrives after the network trip, so every sample runs
+// behind the server by up to a second and then some. The largest recent one is the
+// closest, and with a few samples the start lands tenths, not a second, after it.
+const OFFSET_WINDOW_MS = 10 * 60 * 1000;
+let offsetSamples = [];
 
 // Null before any response has told us.
 function getServerOffsetMs() {
@@ -184,7 +189,11 @@ function getServerOffsetMs() {
 function recordServerDate(dateHeader) {
   const parsed = typeof dateHeader === "string" ? Date.parse(dateHeader) : NaN;
   if (!Number.isNaN(parsed)) {
-    serverOffsetMs = parsed - Date.now();
+    const now = Date.now();
+    offsetSamples = offsetSamples
+      .filter(sample => now - sample.at < OFFSET_WINDOW_MS)
+      .concat({ at: now, offset: parsed - now });
+    serverOffsetMs = Math.max(...offsetSamples.map(sample => sample.offset));
   }
 }
 
@@ -312,7 +321,9 @@ function patchXhr(target) {
       });
     }
     this.addEventListener("load", () => {
-      if (typeof this.getResponseHeader === "function") {
+      // API answers only: a cached asset or another host's response carries a Date
+      // that is not Neptun's clock now, and the Rajtoló schedules against this.
+      if (getEndpoint(this.__npuUrl || this.url) && typeof this.getResponseHeader === "function") {
         recordServerDate(this.getResponseHeader("Date"));
       }
       const status = Number(this.status);
@@ -369,7 +380,7 @@ function patchFetch(target) {
           source: "fetch-401",
         });
       }
-      if (res.headers && typeof res.headers.get === "function") {
+      if (getEndpoint(originalUrl) && res.headers && typeof res.headers.get === "function") {
         recordServerDate(res.headers.get("Date"));
       }
       res

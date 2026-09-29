@@ -128,7 +128,7 @@ const plannedRow = Object.assign({}, registeredRow, {
 });
 assert.strictEqual(registrationData.collectPlannerCourses({ data: [plannedRow] }).entries[0].source, "planned");
 
-// willBeOnWaitingList must never be read as current state (AGENTS.md invariant 5): a
+// willBeOnWaitingList must never be read as current state (CLAUDE.md invariant 5): a
 // row that only carries it, without any of the three measured state fields, is not
 // recognised at all - it is not evidence of anything current.
 const forecastOnlyRow = {

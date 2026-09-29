@@ -33,6 +33,11 @@ működik.
 > **Korai fejlesztési fázis.** A működés és a felület még változhat. Hogy melyik
 > intézményen mit ellenőriztünk, azt a [docs/TESTED.md](docs/TESTED.md) mutatja.
 
+<p align="center">
+  <img src="docs/assets/screenshots/rajtolo.webp" width="760" alt="A Rajtoló ablaka: felül a nyitás időpontja és a hátralévő idő, alatta az élesítés feltételei, a tárgyak és kurzusok sorrendje férőhely-jelöléssel, és a stratégia beállításai.">
+  <br><sub>A Rajtoló ablaka, példaadatokkal.</sub>
+</p>
+
 ## Funkciók
 
 Minden funkció (a lábléc kivételével, mert azon át nyílik a panel) egyenként
@@ -43,6 +48,11 @@ Neptunban; ugyanez áll az alábbi táblázatok **Hol található** oszlopában.
 
 Az NPU által az oldalra tett gombokon és kapcsolókon az NPU kék ikonja látszik,
 fölé húzva pedig az „NPU-funkció” felirat. Ami nem ilyen, az a Neptun saját része.
+
+<p align="center">
+  <img src="docs/assets/screenshots/beallitasok.webp" width="680" alt="Az NPU beállítások panelje: színtéma-választó, alatta a tárgyfelvételi funkciók kapcsolókkal, rövid leírással és azzal, hol találhatók a Neptunban.">
+  <br><sub>A beállítások panel, példaadatokkal.</sub>
+</p>
 
 A **Ki** alapállapot szándékos döntés, nem félkész funkciót jelez. Ezek a
 modulok a Neptun megszokott elrendezését vagy munkafolyamatát változtatják meg,
@@ -69,7 +79,7 @@ leírás](docs/DEVELOPMENT.md) sorolja fel.
 
 | Funkció | Leírás | Hol található | Alapállapot |
 | --- | --- | --- | :---: |
-| Sorba rendezett tárgyfelvétel | Mentett tárgy- és kurzussorrend, a megadott időpontban soros beküldéssel. [Részletek](#a-rajtoló) | Tárgyak › Tárgyfelvétel: **Rajtoló** gomb a szűrők mellett, **Rajtolóhoz** kapcsoló a kurzusoknál | Külön indítható |
+| Sorba rendezett tárgyfelvétel | Mentett tárgy- és kurzussorrend, a megadott időpontban soros beküldéssel. Még nincs minden helyzetben élesben letesztelve, ezért nyitáskor készülj a kézi felvételre is. [Részletek](#a-rajtoló) | Tárgyak › Tárgyfelvétel: **Rajtoló** gomb a szűrők mellett, **Rajtolóhoz** kapcsoló a kurzusoknál | Külön indítható |
 | ↳ Órarendjavaslatok | **Javaslatok** gomb a Neptun Órarendtervezőjében: a felvett órák mellé ütközésmentes kurzusválasztást keres (kevesebb lyukas óra, több szabad nap vagy legkevesebb csere), a heti rácson előnézetben mutatja; megerősítés után a Neptun Tervezőjében is a javasolt kurzusokra cseréli a tervezetteket, és átrendezi a Rajtoló sorrendjét. | Tárgyak › Tárgyfelvétel: a lap alján nyíló Órarendtervező fejléce | Be |
 
 ### Mindennapok
@@ -248,17 +258,43 @@ közvetlenül telepíthető.
 A Rajtoló előre összeállított tervvel, a tárgyfelvétel nyitásakor, a megadott
 sorrendben küldi be a jelentkezéseket.
 
+> [!WARNING]
+> **A Rajtoló még nincs minden helyzetben élesben letesztelve.** A sikeres
+> jelentkezés, a valóban betelt kurzus és a rangsoros kurzus szerverválaszát
+> csak éles tárgyfelvételen lehet lemérni, és ez még hátravan. Nyitáskor legyél
+> a gépnél, legyen kéznél a kurzusaid listája a kódokkal, és ha a Rajtoló megáll,
+> hibát jelez vagy nem történik semmi, vedd fel a tárgyakat azonnal kézzel. Az
+> eredményt mindig ellenőrizd a Neptunban.
+
 1. Jelentkezz be, és maradj bejelentkezve a tervezett kezdésig.
 2. A **Tárgyfelvétel** oldalon listázd a tárgyakat, és a kívánt kurzusoknál
    kapcsold be a **Rajtolóhoz** kapcsolót.
-3. Nyisd meg a Rajtolót a szűrő melletti gombbal: rendezd sorba a tárgyakat és
-   kurzusokat, válaszd ki a nyitás időpontját a Neptun saját tárgyfelvételi
-   időszakaiból, és nézd át az ütközéseket és a kredit-előrejelzést.
-4. Indítsd el, és kövesd az eredményeket. Minden beküldés után a Rajtoló egyszer
-   újra lekéri a tárgy kurzuslistáját: ha a Neptun szerint minden beküldött
+3. Nyisd meg a Rajtolót a szűrő melletti gombbal. Fent mindig látod, mikor nyit
+   a tárgyfelvétel, és mi hiányzik még az élesítéshez. Válaszd ki az időszakot a
+   Neptun saját tárgyfelvételi időszakai közül: a nyitás időpontja magától
+   kitöltődik, de kézzel is átírhatod. Rendezd sorba a tárgyakat és a
+   kurzusokat (a kurzusoknál látod az időpontot és azt, hogy van-e még hely), és
+   nézd át az ütközéseket és a kredit-előrejelzést. A
+   **Kurzusválasztás** sorban döntsd el, hogyan válasszon a sorrendedből:
+   szabad hely előnyben (végső esetben várólista), pontosan a megadott sorrend,
+   vagy csak szabad hely, várólistára soha. A Rajtoló csak a bejelölt
+   kurzusaid közül választ. Azt is beállíthatod, hogy ha egy tárgy minden
+   bejelölt kurzusa betelt, a Rajtoló 5–60 percig figyelje: másodpercenként
+   újraolvassa, és ha hely szabadul fel, azonnal jelentkezik.
+4. Nyomd meg az **Élesítés** gombot (ha a nyitás már elmúlt, **Indítás**), és
+   kövesd az eredményeket. A kurzuslistákat a nyitás előtt
+   20 másodperccel előre betölti, így nyitáskor a tárgyakat egymás után, szünet
+   nélkül, azonnal küldi be. Ha a Neptun a nyitás pillanatában még zárva van, fél
+   percig háromtized másodpercenként újrapróbálja. Az összes beküldés után a
+   Rajtoló tárgyanként egyszer újra lekéri a kurzuslistát: ha a Neptun szerint minden beküldött
    kurzusod felvett, **Felvéve**, ha valamelyiken várólistán vagy, **Várólistára
    került** jelzést kapsz. Ha ez nem dönthető el, **Beküldve** marad, és a
    Neptunban kell ellenőrizned.
+
+<p align="center">
+  <img src="docs/assets/screenshots/rajtolo-eredmeny.webp" width="680" alt="A Rajtoló egy futás után: felül az összegzés (3 tárgyból 2 felvéve, 1 várólistán), a tárgyaknál a Neptun kurzuslistája szerinti eredmény.">
+  <br><sub>Futás után az eredmény, példaadatokkal.</sub>
+</p>
 
 Az időpontok magyar idő szerint értendők akkor is, ha a gépedet más időzónára
 állítottad (például külföldi részképzésen).
@@ -302,7 +338,8 @@ figyelmeztet.
   mérésünk.
 - **A döntést a Neptun hozza.** Éles tárgyfelvételi időszakban még ellenőrizendő
   a sikeres beküldés, a ténylegesen betelt (nem várólistás) kurzus és a
-  rangsoros kurzusok szerverválasza.
+  rangsoros kurzusok szerverválasza. Addig a Rajtoló mellett készülj a kézi
+  felvételre is: ha megáll vagy hibát jelez, vedd fel a tárgyakat kézzel.
 - **Tétlen munkamenet.** A magára hagyott fül munkamenete alapból lejár. Az
   elindított Rajtoló a visszaszámlálás alatt, a bekapcsolt **Munkamenet
   életben tartása** pedig mindig életben tartja, de csak a tárgyfelvételi

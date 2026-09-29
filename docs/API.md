@@ -214,6 +214,11 @@ könyvel találgatott sikert, és a már elküldött kérést nem próbálja vis
 JWT-ellenőrzés az action előtt fut, és a Tervező-hívásoknál mértük, hogy a
 Neptun maga is újraküldi a 401-es kérést. Élő tárgyfelvételi időszakban mérendő.
 
+A fenti, mért „nincs tárgyjelentkezési időszak” választ a Rajtoló a futás első
+30 másodpercében 300 ms-onként, egyesével újraküldi: ez a válasz semmit nem
+dolgozott fel, így egy kicsit később nyitó intézménynél a beküldés a nyitás
+pillanatában ér be. A 30 másodperc után ugyanez a válasz leállítja a futást.
+
 ### `GET SubjectApplication/ScheduledSubjectsWithScheduledCourses` — [Mért]
 
 **Használat:** a fejléc és a Rajtoló kredit-előrejelzésének forrása.

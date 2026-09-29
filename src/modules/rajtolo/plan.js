@@ -4,7 +4,14 @@
 const storage = require("../../storage");
 const utils = require("../../utils");
 const timetable = require("../../timetable");
-const { PLANS_KEY, DEFAULT_DELAY_SECONDS, STATUS_KEY } = require("./constants");
+const {
+  PLANS_KEY,
+  DEFAULT_DELAY_SECONDS,
+  STATUS_KEY,
+  WAITLIST_MODES,
+  DEFAULT_WAITLIST_MODE,
+  WATCH_MINUTES,
+} = require("./constants");
 
 const { toMinutes, normaliseSlot, courseSlots, slotsOverlap, findPlanConflicts } = timetable;
 
@@ -35,25 +42,9 @@ function collectSubjects(json, into) {
   return map;
 }
 
-// The label creditBreakdown.UNTYPED uses for a subject with no `type` at all. Kept as
-// our own constant rather than importing that module, so the two must be changed
-// together by hand.
-const UNTYPED_CREDIT_TYPE = "Szabadon választható";
-
-// Counts only `isRegistered` rows: the same response also carries merely-planned
-// subjects, which would inflate this above what the header shows.
-function registeredCredits(json) {
-  const rows = (json && json.data) || [];
-  const totals = new Map();
-  rows.forEach(row => {
-    if (!row || !(row.isRegistered === true || row.isRegistered === "true")) {
-      return;
-    }
-    const type = (row.type && String(row.type).trim()) || UNTYPED_CREDIT_TYPE;
-    totals.set(type, (totals.get(type) || 0) + (Number(row.credit) || 0));
-  });
-  return totals;
-}
+// The header's own breakdown, so the forecast and the header can never disagree:
+// registered rows only, and its label for a subject with no `type` at all.
+const { breakdown: registeredCredits, UNTYPED: UNTYPED_CREDIT_TYPE } = require("../creditBreakdown");
 
 // Looked up through the live catalog rather than trusting the plan entry: a plan
 // persisted before this feature existed carries no credit at all. A subject missing
@@ -207,7 +198,14 @@ function periodLoadResult(json) {
 }
 
 function emptyPlan(termId) {
-  return { termId: termId || null, startAt: null, delaySeconds: DEFAULT_DELAY_SECONDS, subjects: [] };
+  return {
+    termId: termId || null,
+    startAt: null,
+    delaySeconds: DEFAULT_DELAY_SECONDS,
+    waitlistMode: DEFAULT_WAITLIST_MODE,
+    watchMinutes: 0,
+    subjects: [],
+  };
 }
 
 function loadPlan(termId) {
@@ -238,6 +236,8 @@ function loadPlan(termId) {
     termId,
     startAt: typeof stored.startAt === "string" ? stored.startAt : null,
     delaySeconds: Number.isFinite(delay) && delay >= 1 ? delay : DEFAULT_DELAY_SECONDS,
+    waitlistMode: WAITLIST_MODES.includes(stored.waitlistMode) ? stored.waitlistMode : DEFAULT_WAITLIST_MODE,
+    watchMinutes: WATCH_MINUTES.includes(Number(stored.watchMinutes)) ? Number(stored.watchMinutes) : 0,
     subjects,
   };
 }

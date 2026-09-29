@@ -22,7 +22,7 @@
 //     not seat/capacity ones.
 //   - "létszám" is built from `registeredStudentsCount`/`maxLimit` directly, coloured
 //     via `src/badge.js`'s variants (Neptun's own badge, cloned - never a colour of
-//     ours). AGENTS.md invariant 5: `isFull` is not the same claim as
+//     ours). CLAUDE.md invariant 5: `isFull` is not the same claim as
 //     `registered >= max`, so the full/waitlist/free read comes from `isFull` and
 //     `willBeOnWaitingList` alone - never from arithmetic on the two counts. Those two
 //     fields, not `isOnWaitingList`, are the seat-forecast pair: `willBeOnWaitingList`
@@ -324,7 +324,7 @@ function seatCountText(course) {
 }
 
 // Seat state, built from `isFull`/`willBeOnWaitingList` alone - never from
-// `registeredStudentsCount >= maxLimit` arithmetic (AGENTS.md invariant 5) and never
+// `registeredStudentsCount >= maxLimit` arithmetic (CLAUDE.md invariant 5) and never
 // from `isOnWaitingList`, which is a different, PERSONAL fact (see the file header):
 // whether the student already sits on the waiting list for a course they already
 // applied to, not whether a new application would queue. `occupancy.js`'s own
@@ -340,7 +340,7 @@ function seatCountText(course) {
 //   isFull=false, willBeOnWaitingList=?         -> null         (see below)
 //   isFull=?,     willBeOnWaitingList=anything  -> null         (course itself unknown)
 //
-// The isFull=false/willBeOnWaitingList=null row is deliberate, not an oversight: AGENTS.md
+// The isFull=false/willBeOnWaitingList=null row is deliberate, not an oversight: CLAUDE.md
 // invariant 5 says not to guess a waiting-list verdict, so "not full" alone must not be
 // promoted to "free" - that would silently overclaim there is no queue. `seatsTitle`
 // spells out why the cell gets a neutral, explicit unknown label in that case.

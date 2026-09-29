@@ -253,7 +253,7 @@ assert.strictEqual(view.seatCountText(undefined), "—", "a missing course must 
 // --- queued on a course I already applied to) - useless for a course being browsed;
 // --- willBeOnWaitingList is the seat FORECAST (would a new application queue), which
 // --- is what this column needs. occupancy.js's own seatState reads the same pair.
-// AGENTS.md invariant 5: isFull is not the same claim as registered >= max.
+// CLAUDE.md invariant 5: isFull is not the same claim as registered >= max.
 assert.strictEqual(
   view.seatState({ isFull: null, registeredStudentsCount: 10, maxLimit: 10 }),
   null,
@@ -270,7 +270,7 @@ assert.strictEqual(
   "full",
   "isFull wins over willBeOnWaitingList too - isFull alone decides fullness"
 );
-// AGENTS.md invariant 9: a waiting-list course must never read as a free seat.
+// CLAUDE.md invariant 9: a waiting-list course must never read as a free seat.
 assert.strictEqual(view.seatState({ isFull: false, willBeOnWaitingList: true }), "waitlist");
 assert.strictEqual(view.seatState({ isFull: false, willBeOnWaitingList: false }), "free");
 // The bug this replaces: isOnWaitingList is not read here at all - a course the
@@ -281,7 +281,7 @@ assert.strictEqual(
   "free",
   "isOnWaitingList must not leak into the seat forecast, whatever it says"
 );
-// willBeOnWaitingList missing: must not be guessed as free OR waitlist - AGENTS.md
+// willBeOnWaitingList missing: must not be guessed as free OR waitlist - CLAUDE.md
 // invariant 5 forbids exactly this kind of silent promotion of "not full" to "free".
 assert.strictEqual(
   view.seatState({ isFull: false, willBeOnWaitingList: null }),
@@ -315,7 +315,7 @@ assert.strictEqual(view.seatVariant("free"), "free");
 assert.strictEqual(view.seatVariant(null), "neutral");
 
 // --- hasFreeSeat: the "Csak szabad hely" filter must exclude a waitlisted course --
-// AGENTS.md invariant 9: the waiting list is never shown as a free seat.
+// CLAUDE.md invariant 9: the waiting list is never shown as a free seat.
 assert.strictEqual(
   view.hasFreeSeat({ freeSeat: view.freeSeatFromCourse({ isFull: false, willBeOnWaitingList: true }) }),
   false,

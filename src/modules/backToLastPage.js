@@ -5,12 +5,16 @@
 const interceptor = require("../interceptor");
 const router = require("../router");
 const storage = require("../storage");
+const utils = require("../utils");
 const modal = require("../modal");
 const tokens = require("../neptunTokens");
 
-const LOGIN_ROUTE = "/hallgato_ng/login";
-const SKIP_ROUTES = [LOGIN_ROUTE, "/hallgato_ng/dashboard"];
-const STORAGE_KEY = "lastPage";
+// Same test as index.js's logout detection, trailing slash included.
+const LOGIN_ROUTE = /\/login\/?$/;
+const SKIP_ROUTES = ["/hallgato_ng/dashboard"];
+// Per Neptun domain: a path from one institution means nothing on another's. A new
+// key, since the old global "lastPage" holds a string this one could not nest under.
+const STORAGE_KEY = "lastPageByDomain";
 
 // Shown in the settings panel; `id` is also the key the switch is stored under.
 const meta = {
@@ -27,7 +31,7 @@ function shouldActivate() {
 
 // Pure, so it is checkable without a router.
 function isRememberable(path) {
-  return typeof path === "string" && path.length > 0 && !SKIP_ROUTES.includes(path);
+  return typeof path === "string" && path.length > 0 && !SKIP_ROUTES.includes(path) && !LOGIN_ROUTE.test(path);
 }
 
 // Drawn as a real Neptun dialog rather than a native confirm(), which reads as "a
@@ -59,12 +63,12 @@ function offerReturn(lastPage) {
   });
 }
 
-// Plain storage.set/get, not the per-user variants: this can run before the Neptun
-// code has been captured at all, and "what page was open" is not per-user data.
+// Not the per-user variants: this can run before the Neptun code has been captured
+// at all, and "what page was open" is not per-user data. Per domain, though.
 function initialize() {
   function remember(path) {
     if (isRememberable(path)) {
-      storage.set(STORAGE_KEY, path);
+      storage.set(STORAGE_KEY, utils.getDomain(), path);
     }
   }
 
@@ -81,8 +85,8 @@ function initialize() {
     if (!data || data.isTwoFactorRequired !== false) {
       return;
     }
-    const lastPage = storage.get(STORAGE_KEY);
-    storage.set(STORAGE_KEY, null);
+    const lastPage = storage.get(STORAGE_KEY, utils.getDomain());
+    storage.set(STORAGE_KEY, utils.getDomain(), null);
     if (lastPage) {
       offerReturn(lastPage);
     }

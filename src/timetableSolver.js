@@ -107,7 +107,7 @@ function prepare(input) {
       // Held already, the seat is not at risk whatever the counts say. Otherwise a
       // full course cannot be applied for, `willBeOnWaitingList` means applying now
       // only queues, and `isOnWaitingList` means the student is queued already
-      // (AGENTS.md invariant 5: a waiting list is not a seat).
+      // (CLAUDE.md invariant 5: a waiting list is not a seat).
       const held = option.isSigned === true;
       const full = !held && option.isFull === true;
       const waitlist = !held && option.willBeOnWaitingList === true;
