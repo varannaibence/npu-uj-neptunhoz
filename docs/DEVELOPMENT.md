@@ -144,6 +144,24 @@ selfcheck közvetlenül hajtja őket. A hálózati adatfeldolgozás a mért
 JSON-válaszokra épül; a DOM csak a Neptun meglévő elemeihez való óvatos
 illesztésre szolgál.
 
+A Fejlesztői mód szintén mappa:
+
+```text
+src/devlog.js              a napló gyűrűpuffere; kikapcsolva no-op
+src/modules/devTools/
+  index.js    a modul: interceptor-, auth- és route-kötések, állapotkép
+  samples.js  Mérőmód: a még nem mért válaszok maszkolt mintái
+  panel.js    a Tampermonkey menüből nyíló ablak (Napló, Állapot, Minták)
+```
+
+Bármely fájl írhat a naplóba (`devlog.log(kind, üzenet)`, elnyelt hibánál
+`devlog.error(hol, hiba)`); amíg a Fejlesztői mód ki van kapcsolva, ez semmit
+sem csinál. A naplóba csak hibabejelentésbe is való adat kerülhet: végpontnév,
+státusz, időtartam, állapotváltás. URL-lekérdezés, fejléc, token, Neptun-kód,
+tárgynév nem; szerverszöveg csak `devlog.maskText` után. A modulok indítását
+az `index.js` naplózza, és egy induláskor hibára futó modul már nem akasztja
+meg a többit.
+
 Az `src/storage.js` inicializáláskor megtisztítja a korábbi v1/v3
 `data.users` rekordokban maradt credential mezőket, miközben a terveket és más
 nem érzékeny adatot megtartja. A régi `neptun.users` GM-kulcsot nem olvassa,
@@ -172,6 +190,7 @@ ugyanazon originre megy, és kizárólag az alkalmazás korábban látott
 | `creditBreakdown`                          | Miután az app saját `SchedulableSubjects` kéréséből látja a numerikus `request.termId` értéket, modulindításonként egyszer indít `GET SubjectApplication/ScheduledSubjectsWithScheduledCourses?request.termId=<numeric-term-id>&request.withRegisteredSubjects=true` kérést. A `<numeric-term-id>` itt a kérésből jön, nem a válaszsor GUID-formájú `termId` mezőjéből.                                                                                                                                                                                                                                                             |
 | `rajtolo`                                  | A tervező megnyitásakor `GET Periods/GetPeriods`, valamint szükség esetén a mentett kurzusok címkéihez `GET SubjectApplication/GetSubjectsCourses`; futtatáskor ugyanez frissíti a kurzusállapotot: a nyitás előtt 20 mp-cel tárgyanként egyszer, sorosan előre, hogy nyitáskor csak a beküldés menjen. A beküldés külön, soros `POST SubjectApplication/SubjectSignin` (401 esetén a Neptunnal frissíttetett tokennel egyszer újraküldi, ha közben nem állították le; a mért „nincs tárgyjelentkezési időszak” válaszra a futás első 30 mp-ében 300 ms-onként újraküldi); az összes tárgy beküldése után tárgyanként egy ellenőrző `GET SubjectApplication/GetSubjectsCourses` (Leállítás után nincs). Ha a tervben be van kapcsolva a figyelés, a teljesen betelt tárgyak kurzuslistáját a választott ideig körönként, sorosan, körök között 1 mp szünettel újraolvassa, és szabad helynél azonnal beküldi. Elindítva, a munkamenethez nem küld saját `GetNewTokens`-t: lejárt tokennél a nyitás előtti 90 mp-ben, illetve 10 percnél régebbi tokennél megnyomja a Neptun saját `#filter-table` gombját, és a Neptun maga frissít. Az Órarendtervező **Javaslatok** gombjára egy `GET SubjectApplication/GetScheduledCourses` (friss Tervező), majd tárgyanként egy-egy, soros `GET SubjectApplication/GetSubjectsCourses` a kiválasztott tárgyakra. Megerősített alkalmazáskor és visszavonáskor soros `POST SubjectApplication/UnScheduleCourse` és `POST SubjectApplication/ScheduleSubjectAndCourses` a Neptun Tervezőjére, majd egy visszaolvasó `GetScheduledCourses`. |
 | `infiniteSession`                          | Saját kérést nem küld. A tárgyfelvételi oldalon, ha az oldal 12,5 perce nem küldött saját API-kérést, vagy a legutóbbi tokenfrissítés 10 percnél régebbi és a token lejárt, megnyomja a Neptun saját `#filter-table` gombját, és a Neptun maga frissít; más oldalon nem csinál semmit.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `devTools`                                 | Saját kérést nem küld; az interceptoron át csak figyel.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `dailyOverview`                            | A kezdőlap megnyitásakor (és bejelentkezés után naponta legfeljebb egyszer, az értesítéshez) `GET Calendar/GetStudentTrainings`, `GET Calendar/GetCalendarEvents` (órák, vizsgák, időszakok, szünnapok, −60…+45 nap), `GET FinancialItem/GetItemsToBePayed`; 10 percig gyorsítótárazva.                                                                                                                                                                                                                                                                                                                                             |
 | `gradeCalculator`                          | Csak az Átlagkalkulátor megnyitásakor (az eredmény Neptun-kódonként megmarad, hálózati hiba után a következő megnyitás újrapróbálja): `GET RegistrySheet/GetAdditionalStudentTrainingTermData`, majd legfeljebb három félévre `GET RegistrySheet/GetStudentTrainingTermData` és `GET RegistrySheet/GetStudentTakenSubjectsByTerm` a képlet ellenőrzéséhez. A tárgylistát a `TakenSubjects` válaszából passzívan veszi.                                                                                                                                                                                                                                                                           |
 

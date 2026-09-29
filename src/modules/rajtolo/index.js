@@ -17,6 +17,7 @@ const interceptor = require("../../interceptor");
 const router = require("../../router");
 const storage = require("../../storage");
 const utils = require("../../utils");
+const devlog = require("../../devlog");
 const { ROUTE, FILTER_BUTTON_ID, LAUNCHER_ID, PLANNER_ID } = require("./constants");
 const { SUBJECTS_ENDPOINT, COURSES_ENDPOINT, CREDITS_ENDPOINT } = require("./constants");
 const plan = require("./plan");
@@ -367,6 +368,7 @@ function onStartStop(state) {
     // flight has already reached the server and can't be un-sent, only its
     // *next* step is what Stop actually cancels.
     state.statusText = "Leállítás folyamatban…";
+    devlog.log("rajtolo", "leállítás kérve");
     if (state.controller) {
       state.controller.stop();
     }
@@ -386,6 +388,7 @@ function onStartStop(state) {
   }).find(check => !check.ok);
   if (problem) {
     state.statusText = problem.problem;
+    devlog.log("rajtolo", `nem élesíthető: ${problem.problem}`);
     render(state);
     return;
   }
@@ -396,6 +399,13 @@ function onStartStop(state) {
   state.subjectStatus = new Map();
   render(state);
 
+  devlog.log(
+    "rajtolo",
+    `élesítve: ${state.plan.subjects.length} tárgy, nyitás ${state.plan.startAt}, ` +
+      `szerveróra-eltérés ${interceptor.getServerOffsetMs()} ms, mód: ${state.plan.waitlistMode}`
+  );
+  // By plan position, not by name: the log may end up in a bug report.
+  const position = subject => state.plan.subjects.findIndex(item => item.subjectId === subject.subjectId) + 1;
   const baseTitle = document.title;
   scheduleRun(target, state.plan, state.controller, {
     onTick: wait => {
@@ -404,11 +414,16 @@ function onStartStop(state) {
       setText(dialogQuery(state, `#${PLANNER_ID}-session`), state.sessionWarning.replace(/^ – /, ""));
     },
     onSession: ok => {
+      devlog.log("auth", `Rajtoló munkamenet-frissítés: ${ok ? "sikerült" : "nem sikerült"}`);
       state.sessionWarning = ok
         ? ""
         : " – A Neptun nem adott friss munkamenetet. Kattints valahova a Neptunban, vagy nézd meg, be vagy-e még jelentkezve.";
     },
     onEvent: (subject, kind, message) => {
+      devlog.log(
+        "rajtolo",
+        `#${position(subject)} ${kind}${message ? `: ${devlog.maskText(message, utils.getNeptunCode())}` : ""}`
+      );
       setTitle(runTitle(0, false, baseTitle));
       setText(dialogQuery(state, `#${PLANNER_ID}-countdown`), "Fut…");
       state.subjectStatus.set(subject.subjectId, kind);
@@ -425,6 +440,18 @@ function onStartStop(state) {
       state.running = false;
       // Stopped before the start: keep a reason already shown, such as a logout.
       const stopped = Boolean(state.controller && state.controller.stopped);
+      const counts = {};
+      outcomes.forEach(outcome => {
+        counts[outcome.kind] = (counts[outcome.kind] || 0) + 1;
+      });
+      devlog.log(
+        "rajtolo",
+        `vége${stopped ? " (leállítva)" : ""}: ${
+          Object.entries(counts)
+            .map(([kind, count]) => `${kind} ×${count}`)
+            .join(", ") || "nincs eredmény"
+        }`
+      );
       const stoppedEarly = outcomes.length === 0 && stopped;
       state.statusText = !stoppedEarly
         ? summarize(outcomes, stopped)

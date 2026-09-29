@@ -38,6 +38,18 @@
 
 **Egyéb**
 
+- Új, alapból kikapcsolt **Fejlesztői mód** („Fejlesztői eszközök” csoport):
+  napló az API-hívásokról (metódus, státusz, időtartam, időtúllépés), a
+  munkamenet-váltásokról, az útvonalakról, a szerveróra-eltérésről, a Rajtoló
+  lépéseiről és az eddig csendben elnyelt hibákról, szerveridővel; állapotlap a
+  token lejártáról és a bekapcsolt modulokról. A Tampermonkey menüjéből
+  („NPU fejlesztői eszközök”) nyílik. A **Beküldés GitHubon** gomb a vágólapra
+  másolja, és megnyitja a GitHub „Mérés” űrlapját, ahová csak be kell illeszteni.
+  Csak memóriában él, maszkolva, és magától semmit nem küld el.
+- A Fejlesztői mód része a **Mérőmód**: maszkolva elmenti a Neptun még nem mért
+  tárgyfelvételi válaszait (sikeres jelentkezés, betelt kurzus elutasítása,
+  leadás, kurzuscsere), kézi felvételnél is.
+- Ha egy modul indításkor hibára fut, a többi modul ettől még elindul.
 - Az Órarendjavaslatok akkor is működnek, ha a Férőhely és az Ütközés modul ki
   van kapcsolva.
 - A „Vissza a legutóbbi oldalra” intézményenként jegyzi meg az oldalt.

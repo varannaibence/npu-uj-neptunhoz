@@ -2,10 +2,12 @@
 // call without the app's Authorization header gets 401. Endpoints are matched on the
 // path after this prefix, e.g. "SubjectApplication/SchedulableSubjects".
 const API_PREFIX = "/hallgato_ng/api/";
+const devlog = require("./devlog");
 
 const requestHandlers = [];
 const responseHandlers = [];
 const authHandlers = [];
+const trafficHandlers = [];
 let nextRequestId = 0;
 
 // The Authorization header Angular last set on one of its own XHRs. Modules that
@@ -96,6 +98,7 @@ function setAuthHeader(value, metadata, force) {
       handler(next, info);
     } catch (e) {
       // An observer is advisory and must not interrupt the app request.
+      devlog.error("onAuthChange", e);
     }
   });
 }
@@ -235,6 +238,34 @@ function onResponse(pattern, fn) {
   responseHandlers.push({ pattern, fn });
 }
 
+// Every finished API call, JSON or not, the page's and ours: { endpoint, method,
+// status, durationMs, own, outcome: "load" | "error" | "timeout" | "abort" }. For the
+// developer log; carries no URL, header or body.
+function onTraffic(fn) {
+  trafficHandlers.push(fn);
+}
+
+function emitTraffic(endpoint, method, startedAt, own, outcome, status) {
+  if (!endpoint || trafficHandlers.length === 0) {
+    return;
+  }
+  const traffic = {
+    endpoint,
+    method: method || "GET",
+    status: Number(status) || 0,
+    durationMs: typeof startedAt === "number" ? Date.now() - startedAt : null,
+    own: Boolean(own),
+    outcome,
+  };
+  trafficHandlers.forEach(fn => {
+    try {
+      fn(traffic);
+    } catch (e) {
+      devlog.error("onTraffic", e);
+    }
+  });
+}
+
 function rewriteUrl(url, metadata) {
   const endpoint = getEndpoint(url);
   if (!endpoint) {
@@ -254,6 +285,7 @@ function rewriteUrl(url, metadata) {
       }
     } catch (e) {
       // advisory only
+      devlog.error(`onRequest ${endpoint}`, e);
     }
   });
   return result;
@@ -274,6 +306,7 @@ function dispatchResponse(url, json, metadata) {
       handler.fn(json, Object.assign({ url, endpoint }, metadata || {}));
     } catch (e) {
       // advisory only
+      devlog.error(`onResponse ${endpoint}`, e);
     }
   });
 }
@@ -288,6 +321,7 @@ function patchXhr(target) {
   XHR.prototype.open = function (method, url, ...rest) {
     this.__npuRequestId = ++nextRequestId;
     this.__npuAuthHeader = null;
+    this.__npuMethod = typeof method === "string" ? method.toUpperCase() : "GET";
     this.__npuUrl = rewriteUrl(url, { requestId: this.__npuRequestId });
     return open.call(this, method, this.__npuUrl, ...rest);
   };
@@ -320,6 +354,17 @@ function patchXhr(target) {
         source: "xhr-send",
       });
     }
+    const startedAt = Date.now();
+    const traffic = outcome => () =>
+      emitTraffic(
+        getEndpoint(this.__npuUrl || this.url),
+        this.__npuMethod,
+        startedAt,
+        this.__npuOwn,
+        outcome,
+        this.status
+      );
+    ["error", "timeout", "abort"].forEach(outcome => this.addEventListener(outcome, traffic(outcome)));
     this.addEventListener("load", () => {
       // API answers only: a cached asset or another host's response carries a Date
       // that is not Neptun's clock now, and the Rajtoló schedules against this.
@@ -334,6 +379,8 @@ function patchXhr(target) {
           source: "xhr-401",
         });
       }
+      // After the clock and auth bookkeeping, so the log sees their new state.
+      traffic("load")();
       let json;
       try {
         json = this.responseType === "json" ? this.response : JSON.parse(this.responseText);
@@ -371,7 +418,11 @@ function patchFetch(target) {
       setAuthHeader(authHeader, { requestId, url: originalUrl, source: "fetch" });
     }
     const url = typeof input === "string" ? rewriteUrl(input, { requestId }) : input;
-    return original.call(host, url, init).then(res => {
+    const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+    const startedAt = Date.now();
+    const request = original.call(host, url, init);
+    request.catch(() => emitTraffic(endpoint, method, startedAt, false, "error", 0));
+    return request.then(res => {
       const status = Number(res && res.status);
       if (status === 401 && getEndpoint(originalUrl)) {
         invalidateAuthHeader(authHeader, {
@@ -383,6 +434,7 @@ function patchFetch(target) {
       if (getEndpoint(originalUrl) && res.headers && typeof res.headers.get === "function") {
         recordServerDate(res.headers.get("Date"));
       }
+      emitTraffic(endpoint, method, startedAt, false, "load", status);
       res
         .clone()
         .json()
@@ -439,6 +491,7 @@ module.exports = {
   install,
   onRequest,
   onResponse,
+  onTraffic,
   getAuthHeader,
   getAuthTiming,
   getLastPageRequestAt,

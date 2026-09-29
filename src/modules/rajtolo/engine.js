@@ -1,6 +1,7 @@
 // The run itself. Every network and timing effect arrives through `deps`, so the
 // whole engine - including "Stop actually stops" - is testable with fakes.
 const interceptor = require("../../interceptor");
+const devlog = require("../../devlog");
 const { collectCourses } = require("./plan");
 const {
   classifyResponse,
@@ -312,6 +313,7 @@ function scheduleRun(targetEpochMs, plan, controller, callbacks) {
       controller.prefetchTimer = setTimeout(prefetchLater, startTimeout(wait));
       return;
     }
+    devlog.log("rajtolo", `kurzuslisták előtöltése (${plan.subjects.length} tárgy)`);
     prefetching = (async () => {
       for (const subject of plan.subjects) {
         if (controller.stopped || started) {
@@ -382,6 +384,7 @@ function scheduleRun(targetEpochMs, plan, controller, callbacks) {
   }
   function begin() {
     started = true;
+    devlog.log("rajtolo", `indul a beküldés (${prefetched.size}/${plan.subjects.length} lista előtöltve)`);
     const startedAt = Date.now();
     const deps = {
       get,

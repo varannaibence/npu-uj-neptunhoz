@@ -1,5 +1,6 @@
 // The impure edge: this module's own authenticated calls.
 const interceptor = require("../../interceptor");
+const devlog = require("../../devlog");
 const {
   API_BASE,
   COURSES_ENDPOINT,
@@ -156,21 +157,25 @@ function pressForRenewal() {
   return new Promise(resolve => {
     const button = typeof document !== "undefined" && document.getElementById(FILTER_BUTTON_ID);
     if (!button || button.disabled) {
+      devlog.log("auth", "Neptun-frissítés: nincs használható „Tárgy keresése” gomb");
       resolve(false);
       return;
     }
     let off = () => {};
     const timer = setTimeout(() => {
       off();
+      devlog.log("auth", "Neptun-frissítés: nem jött új fejléc időben");
       resolve(false);
     }, FRESHEN_TIMEOUT_MS);
     off = interceptor.onAuthChange(auth => {
       if (auth) {
         off();
         clearTimeout(timer);
+        devlog.log("auth", "Neptun-frissítés: megjött az új fejléc");
         resolve(true);
       }
     });
+    devlog.log("auth", "Neptun-frissítés: „Tárgy keresése” gomb megnyomva");
     button.click();
   });
 }

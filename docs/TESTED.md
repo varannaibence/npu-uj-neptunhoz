@@ -34,6 +34,32 @@ Ha mind a négy megvan, nyiss egy [issue-t](https://github.com/varannaibence/npu
 verzióját, amely a lap alján olvasható. A négy pont önmagában csak részleges
 ellenőrzés, ezért a táblázatba is így kerül be.
 
+## Mérőmód: minta a még nem mért válaszokról
+
+Néhány Neptun-választ csak éles tárgyfelvételkor lehet látni: a sikeres
+jelentkezését, a betelt kurzus elutasítását, a tárgyleadásét és a
+kurzuscseréét. Ezekből egyetlen minta is sokat segít.
+
+1. Az NPU beállításaiban (a lap alján, **NPU beállítások**) kapcsold be a
+   **Fejlesztői mód** kapcsolót a Fejlesztői eszközök csoportban (alatta a
+   **Mérőmód** alapból be van kapcsolva), és mentsd.
+2. Vedd fel a tárgyaidat úgy, ahogy amúgy is tennéd, kézzel vagy a Rajtolóval.
+   A Mérőmód csak figyel, magától semmit nem küld el. Új mintánál értesítést
+   látsz.
+3. A Tampermonkey menüjében válaszd az **NPU fejlesztői eszközök** pontot, és a
+   **Minták** fülön nézd át a mintákat.
+4. Nyomd meg a **Beküldés GitHubon** gombot. A minták, a napló (időpontok
+   szerveridőben, API-hívások időtartammal) és az állapotlap a vágólapra
+   kerülnek, és megnyílik a GitHub [„Mérés” űrlapja](https://github.com/varannaibence/npu-uj-neptunhoz/issues/new?template=measurement.yml)
+   `Mérés: <intézmény>` címmel. Illeszd be a naplót a mezőbe (Ctrl+V / Cmd+V),
+   nézd át, és küldd el. Ehhez GitHub-fiók kell; ha nincs, a **Minden másolása**
+   gombbal kimásolt szöveget más úton is elküldheted.
+
+A minták maszkoltak: az azonosítók, dátumok, tárgynevek és -kódok helyén
+`<guid>`, `<date>`, `<string>` áll, a Neptun-kódod helyén `<neptun-code>`.
+Csak a Neptun hibaüzeneteinek szövege marad meg, mert épp az a kérdés. Küldés
+előtt azért nézd át, és töröld, amit nem akarsz megosztani.
+
 ## Nem megy? Előbb ezt nézd meg
 
 - **Semmi nem látszik.** A Tampermonkey be van kapcsolva, és a szkript

@@ -103,6 +103,13 @@ leírás](docs/DEVELOPMENT.md) sorolja fel.
 | Verzió és hibabejelentés | Az NPU neve és verziója a bejelentkező oldalon és a láblécben, hibabejelentő linkkel. | Bejelentkező oldal és lábléc | Be |
 | Frissítés jelzése | Amikor a Tampermonkey frissíti az NPU-t, a következő betöltéskor egyszer jelzi az új verziót, a változásnapló linkjével. | Frissítés utáni első betöltéskor | Be |
 
+### Fejlesztői eszközök
+
+| Funkció | Leírás | Hol található | Alapállapot |
+| --- | --- | --- | :---: |
+| Fejlesztői mód | Napló arról, mit lát és mit tesz az NPU: API-hívások metódussal, státusszal és időtartammal, munkamenet-váltások, útvonalak, szerveróra-eltérés, a Rajtoló lépései és az egyébként elnyelt hibák, plusz egy állapotlap (token lejárta, szerveróra, bekapcsolt modulok). Csak memóriában tartja, maszkolva; egy gombbal beküldhető: a vágólapra másolja, és megnyitja a GitHub „Mérés” űrlapját. | Tampermonkey menü › **NPU fejlesztői eszközök** | Ki |
+| ↳ Mérőmód | Maszkolva elmenti a Neptun még nem mért tárgyfelvételi válaszait (pl. sikeres jelentkezés, betelt kurzus elutasítása), hogy elküldhesd a fejlesztőknek. [Hogyan?](docs/TESTED.md#mérőmód-minta-a-még-nem-mért-válaszokról) | Tárgyak › Tárgyfelvétel, a háttérben | Be |
+
 ## Telepítés
 
 Az NPU a **Tampermonkey** böngészőbővítménnyel fut. A telepítés néhány perc.
@@ -354,7 +361,9 @@ figyelmeztet.
 
 Az NPU a böngésződben fut, és semmilyen adatot nem küld saját szerverre. A
 Rajtoló tervei, a beállítások és a legutóbb látott NPU-verzió helyben maradnak,
-jelszót a v3 nem tárol.
+jelszót a v3 nem tárol. A bekapcsolt Fejlesztői mód naplója csak a memóriában
+él, a Mérőmód mintái helyben maradnak; mindkettő maszkolt, és csak az kerül ki
+belőlük, amit te másolsz ki és küldesz el.
 
 <details>
 <summary>Mi történik a régi (2.x) adatokkal?</summary>

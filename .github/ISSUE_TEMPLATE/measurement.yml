@@ -1,0 +1,25 @@
+name: Mérés
+description: A Fejlesztői mód mintái és naplója, a még nem mért Neptun-válaszokhoz
+title: "Mérés: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Köszi a mérést! Egyetlen minta is sokat segít, főleg sikeres tárgyfelvételről vagy betelt kurzus elutasításáról.
+
+        A minták és a napló maszkoltak, de beküldés előtt nézd át őket: **ne legyen bennük név, Neptun-kód, jegy vagy tárgy, amit nem akarsz megosztani.**
+  - type: textarea
+    id: log
+    attributes:
+      label: NPU fejlesztői napló
+      description: Az „NPU fejlesztői eszközök” ablak „Beküldés GitHubon” gombja a vágólapra tette. Illeszd be ide (Ctrl+V / Cmd+V).
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Mi történt közben?
+      description: Például „kézzel vettem fel két tárgyat” vagy „a Rajtoló 10:00-kor indult, három tárggyal”.
+    validations:
+      required: false

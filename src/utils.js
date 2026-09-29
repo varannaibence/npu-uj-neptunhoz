@@ -1,3 +1,5 @@
+const devlog = require("./devlog");
+
 // The Neptun code of the current user. The new UI hands it to us in the API
 // response, so index.js feeds it in and storage.js reads it back out.
 let neptunCode = null;
@@ -28,6 +30,7 @@ function setNeptunCode(code) {
       listener(next, previous);
     } catch (e) {
       // One observer must not break identity capture for the page or other modules.
+      devlog.error("onNeptunCodeChange", e);
     }
   });
 }

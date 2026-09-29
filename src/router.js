@@ -4,6 +4,8 @@
 // its own pushState as an OWN property on `history`, shadowing anything on
 // History.prototype - so a patch survives only if we win a load-order race, on every
 // Angular upgrade. A poll cannot lose it.
+const devlog = require("./devlog");
+
 const POLL_MS = 250;
 
 const listeners = [];
@@ -34,6 +36,7 @@ function check(target = typeof window !== "undefined" ? window : global) {
       fn(path);
     } catch (e) {
       // A route observer is advisory and must not interrupt the others.
+      devlog.error("router.onChange", e);
     }
   });
   return true;
