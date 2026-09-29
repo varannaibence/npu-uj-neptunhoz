@@ -221,4 +221,5 @@ module.exports = {
   breakdown,
   resetState,
   termIdFromUrl,
+  UNTYPED,
 };

@@ -516,6 +516,18 @@ async function runCrossTabSaveCheck() {
     const saved = JSON.parse(values.data);
     assert.strictEqual(saved.otherTab, "plan", "a save never writes back another tab's key from a stale copy");
     assert.strictEqual(saved.lastPage, "/hallgato_ng/x");
+    // A set that lands while a save is still reading the store must stay in memory.
+    const getValue = global.GM.getValue;
+    let interleaved = null;
+    global.GM.getValue = async key => {
+      if (!interleaved) {
+        interleaved = storage.set("interleaved", "b");
+      }
+      return getValue(key);
+    };
+    await storage.set("first", "a");
+    assert.strictEqual(storage.get("interleaved"), "b", "a set made during a save's read is not dropped");
+    await interleaved;
   } finally {
     if (typeof previousGM === "undefined") {
       delete global.GM;

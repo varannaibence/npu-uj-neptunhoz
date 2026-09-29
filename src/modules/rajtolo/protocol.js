@@ -81,11 +81,13 @@ function holdsRankedCourse(groups, courseIndex) {
   );
 }
 
-// One courseId per group: the highest-ranked with a seat, else the highest-ranked
-// that only queues (invariant 5: a waiting list is not a seat), skipping anything
-// full. Null as soon as one group has nothing left to offer, or when the student
-// already holds a ranked course of this subject.
-function chooseCombination(groups, courseIndex, excluded) {
+// One courseId per group, only ever from the group's own ranking, skipping anything
+// full. `mode` (constants.WAITLIST_MODES) decides between a seat and a queue place
+// (invariant 5: a waiting list is not a seat): by default the highest-ranked with a
+// seat, else the highest-ranked that only queues. "never" takes only a course whose
+// forecast is known to be a seat. Null as soon as one group has nothing left to
+// offer, or when the student already holds a ranked course of this subject.
+function chooseCombination(groups, courseIndex, excluded, mode = "seatFirst") {
   if (holdsRankedCourse(groups, courseIndex)) {
     return null;
   }
@@ -93,9 +95,15 @@ function chooseCombination(groups, courseIndex, excluded) {
   for (const group of groups) {
     const open = group.ranking.filter(id => {
       const course = courseIndex.get(id);
-      return !excluded.has(id) && Boolean(course) && course.isFull === false;
+      return (
+        !excluded.has(id) &&
+        Boolean(course) &&
+        course.isFull === false &&
+        (mode !== "never" || course.willBeOnWaitingList === false)
+      );
     });
-    const pick = open.find(id => courseIndex.get(id).willBeOnWaitingList !== true) || open[0];
+    const pick =
+      mode === "seatFirst" ? open.find(id => courseIndex.get(id).willBeOnWaitingList !== true) || open[0] : open[0];
     if (!pick) {
       return null;
     }
@@ -211,6 +219,98 @@ function wallClockToEpoch(value, timeZone = NEPTUN_TIME_ZONE) {
   }
 }
 
+const MONTHS = [
+  "január",
+  "február",
+  "március",
+  "április",
+  "május",
+  "június",
+  "július",
+  "augusztus",
+  "szeptember",
+  "október",
+  "november",
+  "december",
+];
+const WEEKDAYS = ["vasárnap", "hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat"];
+
+// "2026-02-02T10:00" -> "2026. február 2., hétfő 10:00". Wall-clock text in and out:
+// the weekday comes from the date alone, never through this browser's time zone.
+// Null for anything unparseable.
+function formatWallClock(value) {
+  const match = typeof value === "string" && WALL_CLOCK_RE.exec(value);
+  if (!match) {
+    return null;
+  }
+  const [year, month, day, hour, minute] = match.slice(1, 6).map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+  const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  const clock = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  return `${year}. ${MONTHS[month - 1]} ${day}., ${weekday} ${clock}`;
+}
+
+// A coarse "how far off", for the idle panel: it is not redrawn every second, so it
+// must not show seconds that would stand still. `ms` is positive.
+function formatDistance(ms) {
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const rest = minutes % 60;
+  if (days) {
+    return hours ? `${days} nap ${hours} óra` : `${days} nap`;
+  }
+  if (hours) {
+    return rest ? `${hours} óra ${rest} perc` : `${hours} óra`;
+  }
+  return `${rest} perc`;
+}
+
+// The armed countdown's one line; the tick rewrites it every second or two.
+function countdownText(waitMs) {
+  return waitMs > 0 ? `${formatCountdown(waitMs)} múlva indul` : "Indul…";
+}
+
+// What has to hold before the Rajtoló may be armed, in the order a missing one is
+// reported: the dialog lists them, and Start refuses on the first failing one, so the
+// two can never disagree. `nowMs` is the server-corrected now; NaN means unknown.
+// The period check is left out while no period with a closing time is chosen.
+function startChecks({ hasAuth, subjectCount, startMs, closeMs, nowMs }) {
+  const timed = !Number.isNaN(startMs);
+  const checks = [
+    {
+      id: "auth",
+      ok: hasAuth,
+      text: hasAuth ? "Bejelentkezve" : "Nincs érzékelt bejelentkezés",
+      problem: "Nincs érzékelt bejelentkezés - jelentkezz be, majd nyisd meg újra ezt az oldalt.",
+    },
+    {
+      id: "plan",
+      ok: subjectCount > 0,
+      text: subjectCount > 0 ? `${subjectCount} tárgy a sorban` : "Nincs tárgy a sorban",
+      problem: "Adj hozzá legalább egy tárgyat a listához.",
+    },
+    {
+      id: "time",
+      ok: timed,
+      text: timed ? "Nyitás megadva" : "Nincs nyitási időpont",
+      problem: "Adj meg egy érvényes nyitási időpontot.",
+    },
+  ];
+  if (!Number.isNaN(closeMs)) {
+    const open = closeMs > nowMs;
+    checks.push({
+      id: "period",
+      ok: open,
+      text: open ? "Az időszak még nem zárult le" : "Az időszak már lezárult",
+      problem: "A kiválasztott tárgyjelentkezési időszak már lezárult.",
+    });
+  }
+  return checks;
+}
+
 function isNeptunTimeZone() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone === NEPTUN_TIME_ZONE;
@@ -261,6 +361,8 @@ function formatCountdown(ms) {
 const STATUS_LABELS = {
   idle: () => "Vár",
   running: () => "Folyamatban…",
+  sent: () => "Beküldve — az eredményt a többi tárgy után ellenőrzi",
+  watching: () => "Minden kurzus betelt — figyeli, szabad helyre azonnal jelentkezik",
   submitted: () => "Beküldve — ellenőrizd a Neptunban",
   registered: () => "Felvéve (a Neptun kurzuslistája szerint)",
   waitlisted: () => "Várólistára került, ellenőrizd a Neptunban",
@@ -304,6 +406,10 @@ module.exports = {
   tokenExpired,
   runTitle,
   wallClockToEpoch,
+  formatWallClock,
+  formatDistance,
+  countdownText,
+  startChecks,
   isNeptunTimeZone,
   defaultPeriod,
   formatCountdown,

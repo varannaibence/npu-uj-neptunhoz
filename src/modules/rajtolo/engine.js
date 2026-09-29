@@ -13,7 +13,15 @@ const {
   tokenExpired,
 } = require("./protocol");
 const { liveGet, livePost, liveDelay, freshenAuth } = require("./net");
-const { MAX_ATTEMPTS, STATUS_KEY } = require("./constants");
+const {
+  MAX_ATTEMPTS,
+  STATUS_KEY,
+  PREFETCH_LEAD_MS,
+  PREFETCH_MIN_MS,
+  NOT_OPEN_PAUSE_MS,
+  NOT_OPEN_WINDOW_MS,
+  WATCH_PAUSE_MS,
+} = require("./constants");
 
 // --- The run engine. Every network and timing effect is injected via `deps`, so the
 // whole thing - including "Stop actually stops" - is testable with fakes. ---
@@ -43,7 +51,10 @@ async function verifySubmission(subject, courseIds, deps) {
 
 // Compose the best still-available combination, POST, classify, then either stop or
 // retry the next-best up to MAX_ATTEMPTS. Never posts a subject with nothing ranked.
-async function runSubject(subject, deps) {
+// `prefetched` is the course list read just before the opening, when nothing could
+// change it yet: the first attempt posts straight from it. A submission is only sent
+// here; runPlan reads back what it did once every subject has had its turn.
+async function runSubject(subject, deps, prefetched) {
   if (!subject.groups || subject.groups.length === 0) {
     return { kind: "unconfigured" };
   }
@@ -52,7 +63,7 @@ async function runSubject(subject, deps) {
     if (deps.controller.stopped) {
       return { kind: "stopped" };
     }
-    const coursesBody = await deps.get(subject);
+    const coursesBody = attempt === 0 && prefetched ? prefetched : await deps.get(subject);
     if (isHalted(coursesBody)) {
       return { kind: "stopped" };
     }
@@ -64,25 +75,41 @@ async function runSubject(subject, deps) {
     if (holdsRankedCourse(subject.groups, courseIndex)) {
       return { kind: "held" };
     }
-    const courseIds = chooseCombination(subject.groups, courseIndex, excluded);
+    const courseIds = chooseCombination(subject.groups, courseIndex, excluded, deps.waitlistMode);
     if (!courseIds) {
       return { kind: "exhausted" };
     }
     if (deps.controller.stopped) {
       return { kind: "stopped" };
     }
-    const body = await deps.post(subject, courseIds);
+    let body = await deps.post(subject, courseIds);
+    // Not open yet, right at the start: that answer is measured and processed nothing,
+    // so the same POST goes again at once - one at a time, within a bounded window.
+    while (
+      !isHalted(body) &&
+      typeof deps.notOpenUntil === "number" &&
+      deps.now() < deps.notOpenUntil &&
+      classifyResponse(body).kind === "notOpen"
+    ) {
+      await deps.pause(NOT_OPEN_PAUSE_MS);
+      if (deps.controller.stopped) {
+        return { kind: "stopped" };
+      }
+      body = await deps.post(subject, courseIds);
+    }
     if (isHalted(body)) {
       return { kind: "stopped" };
     }
     const result = classifyResponse(body);
     if (result.kind === "submitted") {
-      return verifySubmission(subject, courseIds, deps);
+      return { kind: "submitted", courseIds };
     }
     if (result.kind === "requirement" || result.kind === "unknown" || result.kind === "notOpen") {
       return result;
     }
-    // "full": next-ranked combination, if attempts remain (bounded).
+    // "full": next-ranked combination, if attempts remain (bounded). Unreachable on
+    // purpose until a real "full" rejection is measured: classifyResponse has no such
+    // kind yet, so one reads as "unknown" and halts the run (invariant 4).
     courseIds.forEach(id => excluded.add(id));
     if (attempt < MAX_ATTEMPTS - 1) {
       await deps.delay();
@@ -94,29 +121,83 @@ async function runSubject(subject, deps) {
 // Walks the priority-ordered subject list. An "unknown" classification halts the
 // ENTIRE run: ploughing on through a response nobody understands is worse than
 // stopping and showing the text. Every other terminal state advances to the next
-// subject. Stop is checked at every loop boundary, including inside runSubject.
+// subject. Stop is checked at every loop boundary, including inside runSubject. The
+// next subject goes out as soon as the previous one is answered: still one request at
+// a time, but no pause and no read-back in between, since the first seconds after
+// opening decide. The read-backs follow once everything is sent, then the watch.
 async function runPlan(plan, deps) {
   const outcomes = [];
+  const watch = typeof deps.watchUntil === "number";
+  let halted = false;
   for (const subject of plan.subjects) {
     if (deps.controller.stopped) {
       outcomes.push({ subject, kind: "stopped" });
       break;
     }
     deps.onEvent(subject, "running");
-    const outcome = await runSubject(subject, deps);
-    outcomes.push(Object.assign({ subject }, outcome));
-    deps.onEvent(subject, outcome.kind, outcome.message);
+    const outcome = Object.assign(
+      { subject },
+      await runSubject(subject, deps, deps.prefetched && deps.prefetched.get(subject.subjectId))
+    );
+    outcomes.push(outcome);
+    const shown = outcome.kind === "submitted" ? "sent" : outcome.kind === "exhausted" && watch ? "watching" : null;
+    deps.onEvent(subject, shown || outcome.kind, outcome.message);
     // Registration being shut is not about this subject, so there is no point
     // walking the rest of the queue into the same wall.
     if (outcome.kind === "unknown" || outcome.kind === "notOpen") {
+      halted = true;
       break;
     }
     if (deps.controller.stopped) {
       break;
     }
-    await deps.delay(); // pace between subjects too (sequential, never parallel)
+  }
+  for (const outcome of outcomes) {
+    if (outcome.kind === "submitted") {
+      await readBack(outcome, deps);
+    }
+  }
+  if (watch && !halted) {
+    await watchFull(outcomes, deps);
   }
   return outcomes;
+}
+
+async function readBack(outcome, deps) {
+  outcome.kind = (await verifySubmission(outcome.subject, outcome.courseIds, deps)).kind;
+  deps.onEvent(outcome.subject, outcome.kind);
+}
+
+// Subjects whose every ranked course was full are read again round after round, one
+// request at a time, and sent the moment a seat shows up, until the chosen minutes run
+// out or Stop. The same runSubject as at the opening, so every answer is classified
+// the same way, and an unknown one still halts everything.
+async function watchFull(outcomes, deps) {
+  const watching = () => outcomes.filter(outcome => outcome.kind === "exhausted");
+  let halted = false;
+  while (!halted && watching().length > 0 && deps.now() < deps.watchUntil && !deps.controller.stopped) {
+    await deps.pause(WATCH_PAUSE_MS);
+    for (const outcome of watching()) {
+      if (deps.controller.stopped) {
+        break;
+      }
+      const next = await runSubject(outcome.subject, deps);
+      if (next.kind === "exhausted" || next.kind === "stopped") {
+        continue;
+      }
+      Object.assign(outcome, next);
+      if (next.kind === "submitted") {
+        await readBack(outcome, deps);
+      } else {
+        deps.onEvent(outcome.subject, next.kind, next.message);
+      }
+      if (next.kind === "unknown" || next.kind === "notOpen") {
+        halted = true;
+        break;
+      }
+    }
+  }
+  watching().forEach(outcome => deps.onEvent(outcome.subject, "exhausted"));
 }
 
 // `stopped`: the run was stopped, so it did not finish even when every outcome reads
@@ -124,7 +205,7 @@ async function runPlan(plan, deps) {
 function summarize(outcomes, stopped) {
   const count = kind => outcomes.filter(o => o.kind === kind).length;
   if (outcomes.some(o => o.kind === "notOpen")) {
-    return "A tárgyjelentkezési időszak még nincs nyitva.";
+    return "A tárgyjelentkezési időszak még nincs nyitva. Ha közben kinyit, vedd fel a tárgyakat kézzel.";
   }
   const registered = count("registered");
   const waitlisted = count("waitlisted");
@@ -135,7 +216,7 @@ function summarize(outcomes, stopped) {
   const sentText = `${sent}/${outcomes.length} tárgy beküldve${details.length ? `, ebből ${details.join(", ")}` : ""}`;
   const haltedByUnknown = outcomes.some(o => o.kind === "unknown");
   if (haltedByUnknown) {
-    return `Leállt ismeretlen hiba miatt (${sentText}; ellenőrizd a Neptunban).`;
+    return `Leállt ismeretlen hiba miatt (${sentText}). A hiányzó tárgyakat vedd fel kézzel a Neptunban.`;
   }
   return stopped || outcomes.some(o => o.kind === "stopped")
     ? `Leállítva (${sentText}; ellenőrizd a Neptunban).`
@@ -144,10 +225,10 @@ function summarize(outcomes, stopped) {
 
 function createController() {
   // `timer` is the display tick, `startTimer` the one that actually begins the run.
-  const controller = { stopped: false, timer: null, startTimer: null };
+  const controller = { stopped: false, timer: null, startTimer: null, prefetchTimer: null };
   controller.stop = function stop() {
     controller.stopped = true;
-    ["timer", "startTimer"].forEach(key => {
+    ["timer", "startTimer", "prefetchTimer"].forEach(key => {
       if (controller[key] !== null) {
         clearTimeout(controller[key]);
         controller[key] = null;
@@ -173,13 +254,13 @@ function startTimeout(waitMs) {
 // The start is ONE timer armed straight from the click, not the end of a timer chain.
 // Chrome runs chained timers in a tab hidden for 5+ minutes only once a minute, so a
 // chained countdown could start the run up to a minute late. The chained tick below
-// only repaints the countdown; being throttled costs nothing there. If the server
-// offset moved while waiting, the start timer fires early and simply re-arms once.
+// mostly repaints the countdown; being throttled costs nothing there. If the server
+// offset moved while waiting, the start timer fires early and simply re-arms once -
+// or, when the target turns out to be sooner, the tick starts the run itself.
 //
-// Detecting the ACTUAL opening (an institution can open late) would need a measured
-// closed-vs-open response shape, which we do not have. So this does only the safe
-// half. The real safety net is downstream: every attempt is classified for real, so
-// firing early or late fails safe rather than looping.
+// An institution opening a moment late answers with the measured "not open yet",
+// which runSubject resends for a bounded window. Every other answer is classified for
+// real, so firing early or late fails safe rather than looping.
 function scheduleRun(targetEpochMs, plan, controller, callbacks) {
   let finished = false;
   function finish(outcomes) {
@@ -204,6 +285,52 @@ function scheduleRun(targetEpochMs, plan, controller, callbacks) {
       finish([]);
     }
   };
+
+  // A long run outlives the 5-minute token; renew it before a request would bounce.
+  const session = {
+    // No header at all is a token a 401 has just retired.
+    needsRenewal: () => !interceptor.getAuthHeader() || tokenExpired(interceptor.getAuthTiming(), Date.now()),
+    renew: freshenAuth,
+    // Stop - pressed by the user or by a user switch - is honoured after every wait.
+    shouldContinue: () => !controller.stopped,
+  };
+  const fresh = request => withRenewal(request, session);
+  const get = fresh(liveGet);
+
+  // Read ahead: until the opening nothing can change a course list, so each subject's
+  // is read PREFETCH_LEAD_MS early, one at a time, and the opening costs it only its
+  // POST. The start waits out the one read in flight rather than overlapping it.
+  const prefetched = new Map();
+  let prefetching = Promise.resolve();
+  function prefetchLater() {
+    controller.prefetchTimer = null;
+    if (controller.stopped || started) {
+      return;
+    }
+    const wait = waitNow() - PREFETCH_LEAD_MS;
+    if (wait > 1000) {
+      controller.prefetchTimer = setTimeout(prefetchLater, startTimeout(wait));
+      return;
+    }
+    prefetching = (async () => {
+      for (const subject of plan.subjects) {
+        if (controller.stopped || started) {
+          return;
+        }
+        const body = await get(subject);
+        if (validateCourseList(body).kind === "ok") {
+          prefetched.set(subject.subjectId, body);
+        }
+      }
+    })().catch(() => {});
+    // Those reads also sampled the server clock: aim the start with the fresh offset.
+    prefetching.then(() => {
+      if (!started && !controller.stopped) {
+        clearTimeout(controller.startTimer);
+        armStart();
+      }
+    });
+  }
 
   // Keeps the session alive while armed, and renews the token just before the start.
   let freshening = false;
@@ -234,6 +361,10 @@ function scheduleRun(targetEpochMs, plan, controller, callbacks) {
     keepSession(wait);
     if (wait > 0) {
       controller.timer = setTimeout(tick, wait > 5000 ? 2000 : 1000);
+    } else if (!started && controller.startTimer !== null) {
+      clearTimeout(controller.startTimer);
+      controller.startTimer = null;
+      begin();
     }
   }
   function armStart() {
@@ -251,23 +382,22 @@ function scheduleRun(targetEpochMs, plan, controller, callbacks) {
   }
   function begin() {
     started = true;
-    // A long run outlives the 5-minute token; renew it before a request would bounce.
-    const session = {
-      // No header at all is a token a 401 has just retired.
-      needsRenewal: () => !interceptor.getAuthHeader() || tokenExpired(interceptor.getAuthTiming(), Date.now()),
-      renew: freshenAuth,
-      // Stop - pressed by the user or by a user switch - is honoured after every wait.
-      shouldContinue: () => !controller.stopped,
-    };
-    const fresh = request => withRenewal(request, session);
+    const startedAt = Date.now();
     const deps = {
-      get: fresh(liveGet),
+      get,
       post: fresh(livePost),
       delay: liveDelay(plan.delaySeconds),
+      waitlistMode: plan.waitlistMode,
+      prefetched,
+      now: Date.now,
+      pause: ms => new Promise(resolve => setTimeout(resolve, ms)),
+      notOpenUntil: startedAt + NOT_OPEN_WINDOW_MS,
+      watchUntil: plan.watchMinutes > 0 ? startedAt + plan.watchMinutes * 60 * 1000 : undefined,
       onEvent: callbacks.onEvent,
       controller,
     };
-    runPlan(plan, deps)
+    prefetching
+      .then(() => runPlan(plan, deps))
       .then(finish)
       .catch(error => {
         finish([
@@ -280,6 +410,9 @@ function scheduleRun(targetEpochMs, plan, controller, callbacks) {
   }
   tick();
   armStart();
+  if (waitNow() > PREFETCH_MIN_MS) {
+    prefetchLater();
+  }
 }
 
 // What a wrapped request answers when Stop came while it waited for a renewal: it was
@@ -294,7 +427,7 @@ function isHalted(body) {
 // inference, not a measurement for SubjectSignin: JWT validation rejects before the
 // action runs (measured only for the planner calls, docs/API.md). Anything else, a
 // timeout included, comes back as it came: a request that may have been processed is
-// never sent again (AGENTS.md invariant 6). A renewal can take seconds, so Stop is
+// never sent again (CLAUDE.md invariant 6). A renewal can take seconds, so Stop is
 // checked again after each one, and a stopped run sends nothing more.
 function withRenewal(request, session) {
   const halted = () => typeof session.shouldContinue === "function" && !session.shouldContinue();

@@ -57,6 +57,19 @@ const noDateXhr = new datedWindow.XMLHttpRequest();
 noDateXhr.open("GET", "/hallgato_ng/api/UserInfo");
 noDateXhr.send();
 assert.strictEqual(interceptor.getServerOffsetMs(), offset, "a missing header must not reset the offset");
+// a non-API response (a cached asset, another host) is not Neptun's clock now
+const staleXhr = new datedWindow.XMLHttpRequest();
+staleXhr._dateHeader = new Date(Date.now() - 86400000).toUTCString();
+staleXhr.open("GET", "/hallgato_ng/assets/i18n/hu.json");
+staleXhr.send();
+assert.strictEqual(interceptor.getServerOffsetMs(), offset, "only API answers move the offset");
+// Date has whole seconds: a sample that looks further behind does not pull the
+// estimate back, the closest recent one wins
+const behindXhr = new datedWindow.XMLHttpRequest();
+behindXhr._dateHeader = new Date(Date.now() + 89000).toUTCString();
+behindXhr.open("GET", "/hallgato_ng/api/UserInfo");
+behindXhr.send();
+assert.strictEqual(interceptor.getServerOffsetMs(), offset, "the largest recent sample is kept");
 
 // the countdown itself: server-corrected, not local-clock-trusting
 assert.strictEqual(rajtolo.msUntilTarget(100000, 20000, 50000), 30000, "target minus offset minus now");
@@ -114,6 +127,33 @@ assert.strictEqual(
 assert.ok(Number.isNaN(rajtolo.wallClockToEpoch("")), "an empty field is no time at all");
 assert.ok(Number.isNaN(rajtolo.wallClockToEpoch(null)));
 assert.ok(Number.isNaN(rajtolo.wallClockToEpoch("holnap reggel")));
+
+// The dialog's words for times, and the checks it shares with Start.
+{
+  const protocol = require("../src/modules/rajtolo/protocol");
+  assert.strictEqual(protocol.formatWallClock("2026-02-02T10:00"), "2026. február 2., hétfő 10:00");
+  assert.strictEqual(protocol.formatWallClock("2026-10-02T09:05:30"), "2026. október 2., péntek 09:05");
+  assert.strictEqual(protocol.formatWallClock("holnap"), null);
+  assert.strictEqual(protocol.formatDistance(2 * 86400000 + 20 * 3600000 + 47 * 60000), "2 nap 20 óra");
+  assert.strictEqual(protocol.formatDistance(90 * 60000), "1 óra 30 perc");
+  assert.strictEqual(protocol.formatDistance(5000), "1 perc", "no seconds that would stand still");
+  assert.strictEqual(protocol.countdownText(65000), "1p 5mp múlva indul");
+  assert.strictEqual(protocol.countdownText(0), "Indul…");
+
+  const ready = { hasAuth: true, subjectCount: 2, startMs: 1000, closeMs: 5000, nowMs: 2000 };
+  assert.ok(
+    protocol.startChecks(ready).every(check => check.ok),
+    "logged in, planned, timed, period open"
+  );
+  const firstProblem = input => (protocol.startChecks(input).find(check => !check.ok) || {}).id;
+  assert.strictEqual(firstProblem(Object.assign({}, ready, { hasAuth: false, subjectCount: 0 })), "auth");
+  assert.strictEqual(firstProblem(Object.assign({}, ready, { startMs: NaN })), "time");
+  assert.strictEqual(firstProblem(Object.assign({}, ready, { nowMs: 6000 })), "period", "a closed period blocks");
+  assert.ok(
+    !protocol.startChecks(Object.assign({}, ready, { closeMs: NaN })).some(check => check.id === "period"),
+    "no period chosen: nothing to say about it"
+  );
+}
 
 // The period picker opens on the current or next period, not on whichever is first.
 {
@@ -217,7 +257,7 @@ assert.strictEqual(
 );
 assert.strictEqual(
   rajtolo.summarize([{ kind: "submitted" }, { kind: "unknown" }]),
-  "Leállt ismeretlen hiba miatt (1/2 tárgy beküldve; ellenőrizd a Neptunban)."
+  "Leállt ismeretlen hiba miatt (1/2 tárgy beküldve). A hiányzó tárgyakat vedd fel kézzel a Neptunban."
 );
 assert.strictEqual(
   rajtolo.summarize([{ kind: "submitted" }, { kind: "stopped" }]),
@@ -289,6 +329,28 @@ assert.deepStrictEqual(rajtolo.chooseCombination([], courseIndex, new Set()), []
     rajtolo.chooseCombination([{ ranking: ["G1"] }], queue, new Set()),
     ["G1"],
     "with no seat anywhere, the waiting list is still tried"
+  );
+  // the switch: never outside the user's ranking, only how seat and queue compare
+  assert.deepStrictEqual(
+    rajtolo.chooseCombination([{ ranking: ["G1", "G2"] }], queue, new Set(), "order"),
+    ["G1"],
+    "order: the user's first non-full course, even when it only queues"
+  );
+  assert.deepStrictEqual(
+    rajtolo.chooseCombination([{ ranking: ["G1", "G2"] }], queue, new Set(), "never"),
+    ["G2"],
+    "never: the first course with a known seat"
+  );
+  assert.strictEqual(
+    rajtolo.chooseCombination([{ ranking: ["G1"] }], queue, new Set(), "never"),
+    null,
+    "never: only a queue left -> nothing is sent"
+  );
+  const unknownForecast = new Map([["U1", { id: "U1", isFull: false, willBeOnWaitingList: null }]]);
+  assert.strictEqual(
+    rajtolo.chooseCombination([{ ranking: ["U1"] }], unknownForecast, new Set(), "never"),
+    null,
+    "never: an unknown forecast is not taken for a seat"
   );
 }
 
@@ -585,32 +647,30 @@ async function runEngineChecks() {
     ]);
     const signed = rows => rows.map(row => Object.assign({}, row, { isSigned: true }));
 
+    // The read-back comes after every subject has been sent, so it is runPlan's.
+    const runOne = async deps => (await rajtolo.runPlan({ subjects: [twoGroups] }, deps))[0].kind;
     const confirmed = verifyingDeps(signed);
-    assert.strictEqual((await rajtolo.runSubject(twoGroups, confirmed)).kind, "registered");
+    assert.strictEqual(await runOne(confirmed), "registered");
     assert.deepStrictEqual(confirmed.calls, ["get", "verify"], "exactly one extra read, after the POST");
 
     const queued = verifyingDeps(rows => [
       Object.assign({}, rows[0], { isSigned: true }),
       Object.assign({}, rows[1], { isOnWaitingList: true }),
     ]);
-    assert.strictEqual(
-      (await rajtolo.runSubject(twoGroups, queued)).kind,
-      "waitlisted",
-      "one queued course means the subject is not secured"
-    );
+    assert.strictEqual(await runOne(queued), "waitlisted", "one queued course means the subject is not secured");
 
     const half = verifyingDeps(rows => [Object.assign({}, rows[0], { isSigned: true }), rows[1]]);
-    assert.strictEqual((await rajtolo.runSubject(twoGroups, half)).kind, "submitted", "half signed is not felvéve");
+    assert.strictEqual(await runOne(half), "submitted", "half signed is not felvéve");
 
     const unread = verifyingDeps(signed, { failVerify: true });
     assert.strictEqual(
-      (await rajtolo.runSubject(twoGroups, unread)).kind,
+      await runOne(unread),
       "submitted",
       "a failed check is not an unknown error: the run must not halt over it"
     );
 
     const stopped = verifyingDeps(signed, { stopOnPost: true });
-    assert.strictEqual((await rajtolo.runSubject(twoGroups, stopped)).kind, "submitted");
+    assert.strictEqual(await runOne(stopped), "submitted");
     assert.deepStrictEqual(stopped.calls, ["get"], "Stop means no further request, the check included");
 
     assert.strictEqual(rajtolo.submissionOutcome(new Map(), ["c1"]), null, "a course missing from the list");
@@ -729,6 +789,157 @@ async function runEngineChecks() {
     assert.strictEqual(outcomes.length, 1, "must stop at the unrecognised error, not continue to s2");
     assert.strictEqual(outcomes[0].kind, "unknown");
     assert.deepStrictEqual(attempted, ["s1"], "s2 must never be touched once an unknown error halts the run");
+  }
+
+  // the next subject goes out as soon as the previous one is answered: no pause
+  {
+    const attempted = [];
+    let delays = 0;
+    const deps = {
+      get: subj => {
+        attempted.push(subj.subjectId);
+        return Promise.resolve({ data: [{ id: "c1", subjectId: subj.subjectId, isFull: false }], notification: [] });
+      },
+      post: () =>
+        Promise.resolve({
+          data: null,
+          notification: [{ description: "Végső tárgykövetelmény nem teljesült", type: 3 }],
+        }),
+      delay: () => {
+        delays++;
+        return Promise.resolve();
+      },
+      onEvent: () => {},
+      controller: fakeController(),
+    };
+    const planNoPause = {
+      subjects: [
+        subject("s1", [{ type: "Elmélet", ranking: ["c1"] }]),
+        subject("s2", [{ type: "Elmélet", ranking: ["c1"] }]),
+      ],
+    };
+    await rajtolo.runPlan(planNoPause, deps);
+    assert.deepStrictEqual(attempted, ["s1", "s2"], "both subjects are attempted");
+    assert.strictEqual(delays, 0, "no pause between subjects");
+  }
+
+  // Speed at the opening: a read-ahead list means POST first, and every read-back
+  // waits until all subjects have been sent.
+  {
+    const calls = [];
+    const signedAfterPost = new Set();
+    const rows = id => [{ id: `${id}-c`, subjectId: id, isFull: false, isSigned: signedAfterPost.has(id) }];
+    const deps = {
+      get: subj => {
+        calls.push(`get ${subj.subjectId}`);
+        return Promise.resolve({ data: rows(subj.subjectId), notification: [] });
+      },
+      post: subj => {
+        calls.push(`post ${subj.subjectId}`);
+        signedAfterPost.add(subj.subjectId);
+        return Promise.resolve({ data: {}, notification: [] });
+      },
+      delay: noDelay,
+      onEvent: () => {},
+      controller: fakeController(),
+      prefetched: new Map([["s1", { data: rows("s1"), notification: [] }]]),
+    };
+    const outcomes = await rajtolo.runPlan(
+      { subjects: [subject("s1", [{ ranking: ["s1-c"] }]), subject("s2", [{ ranking: ["s2-c"] }])] },
+      deps
+    );
+    assert.deepStrictEqual(
+      calls,
+      ["post s1", "get s2", "post s2", "get s1", "get s2"],
+      "the read-ahead subject posts at once; the read-backs come last"
+    );
+    assert.deepStrictEqual(
+      outcomes.map(o => o.kind),
+      ["registered", "registered"]
+    );
+  }
+
+  // "Not open yet" right at the start is sent again, one POST at a time, only inside
+  // its window; past the window it halts the run as before.
+  {
+    const notOpen = {
+      data: null,
+      notification: [{ description: "Jelenleg nincs tárgyjelentkezési időszak!", type: 3 }],
+    };
+    const notOpenDeps = (answers, now, until) => {
+      let posts = 0;
+      return {
+        posts: () => posts,
+        get: subj =>
+          Promise.resolve({ data: [{ id: "c1", subjectId: subj.subjectId, isFull: false }], notification: [] }),
+        post: () => Promise.resolve(answers[Math.min(posts++, answers.length - 1)]),
+        delay: noDelay,
+        pause: noDelay,
+        now: () => now,
+        notOpenUntil: until,
+        onEvent: () => {},
+        controller: fakeController(),
+      };
+    };
+    const opened = notOpenDeps([notOpen, notOpen, { data: {}, notification: [] }], 1000, 2000);
+    const outcome = await rajtolo.runSubject(subject("s1", [{ ranking: ["c1"] }]), opened);
+    assert.strictEqual(outcome.kind, "submitted", "the POST goes through once the server opens");
+    assert.strictEqual(opened.posts(), 3);
+    const late = notOpenDeps([notOpen], 5000, 2000);
+    assert.strictEqual((await rajtolo.runSubject(subject("s1", [{ ranking: ["c1"] }]), late)).kind, "notOpen");
+    assert.strictEqual(late.posts(), 1, "past the window nothing is resent");
+  }
+
+  // Watch: a subject whose every ranked course is full is read again round by round
+  // and sent the moment a seat shows up; it ends with the chosen time.
+  {
+    let now = 0;
+    let reads = 0;
+    let posts = 0;
+    const events = [];
+    const deps = {
+      get: subj => {
+        reads++;
+        // Full for the opening and the first watch round, a seat from the second one.
+        const full = reads < 3;
+        return Promise.resolve({
+          data: [{ id: "c1", subjectId: subj.subjectId, isFull: full, isSigned: posts > 0 }],
+          notification: [],
+        });
+      },
+      post: () => {
+        posts++;
+        return Promise.resolve({ data: {}, notification: [] });
+      },
+      delay: noDelay,
+      pause: () => {
+        now += 1000;
+        return Promise.resolve();
+      },
+      now: () => now,
+      watchUntil: 60000,
+      onEvent: (subj, kind) => events.push(kind),
+      controller: fakeController(),
+    };
+    const outcomes = await rajtolo.runPlan({ subjects: [subject("s1", [{ ranking: ["c1"] }])] }, deps);
+    assert.strictEqual(outcomes[0].kind, "registered", "the freed seat is taken");
+    assert.strictEqual(posts, 1, "exactly one POST, once the seat showed up");
+    assert.deepStrictEqual(events, ["running", "watching", "registered"]);
+
+    let idleNow = 0;
+    const idle = Object.assign({}, deps, {
+      get: subj => Promise.resolve({ data: [{ id: "c1", subjectId: subj.subjectId, isFull: true }], notification: [] }),
+      pause: () => {
+        idleNow += 1000;
+        return Promise.resolve();
+      },
+      now: () => idleNow,
+      watchUntil: 5000,
+      onEvent: () => {},
+    });
+    const idleOutcomes = await rajtolo.runPlan({ subjects: [subject("s1", [{ ranking: ["c1"] }])] }, idle);
+    assert.strictEqual(idleOutcomes[0].kind, "exhausted", "the watch ends with its time");
+    assert.ok(idleNow >= 5000 && idleNow <= 6000, "and does not outlast it");
   }
 
   // "Stop actually stops": once the controller is stopped mid-run, no further
@@ -855,10 +1066,32 @@ async function runEngineChecks() {
         done = outcomes;
       },
     });
-    assert.strictEqual(timers.length, 2, "one display tick and one start timer");
+    assert.strictEqual(timers.length, 3, "a display tick, the start timer and the read-ahead");
     assert.ok(timers[1].ms > 590000, "the start timer sleeps the whole wait at once");
+    assert.ok(
+      timers[2].ms > 570000 && timers[2].ms < 590000,
+      "the course lists are read 20 s before the opening, once"
+    );
     controller.stop();
     assert.deepStrictEqual(done, [], "Stop before the start reports back at once");
+
+    // A later offset can bring the target nearer than the armed start timer: the
+    // tick then starts the run instead of letting the old wait sleep out.
+    timers.length = 0;
+    const pulled = rajtolo.createController();
+    const soon = Date.now() + (interceptor.getServerOffsetMs() || 0) + 600000;
+    engine.scheduleRun(soon, { subjects: [], delaySeconds: 1 }, pulled, {
+      onTick() {},
+      onSession() {},
+      onEvent() {},
+      onDone() {},
+    });
+    const aheadXhr = new datedWindow.XMLHttpRequest();
+    aheadXhr._dateHeader = new Date(Date.now() + 700000).toUTCString();
+    aheadXhr.open("GET", "/hallgato_ng/api/UserInfo");
+    aheadXhr.send();
+    timers[0].fn();
+    assert.strictEqual(pulled.startTimer, null, "the tick that sees the target reached starts the run");
   } finally {
     global.setTimeout = originalSetTimeout;
     global.clearTimeout = originalClearTimeout;

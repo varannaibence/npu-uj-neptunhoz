@@ -113,7 +113,10 @@ async function saveMerged() {
   try {
     const loaded = JSON.parse(await gmGet("data"));
     if (loaded && typeof loaded === "object") {
-      mine.forEach(({ keys, value }) => utils.deepSetProp(loaded, keys, value));
+      // Also the sets made while the read was in flight: they are in `data` already,
+      // and replacing it without them would lose them until the next save lands. They
+      // stay queued for their own save.
+      mine.concat(unsavedMutations).forEach(({ keys, value }) => utils.deepSetProp(loaded, keys, value));
       data = loaded;
     }
   } catch (e) {

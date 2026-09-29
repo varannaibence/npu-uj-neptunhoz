@@ -133,7 +133,7 @@ function optionalCourseFields(row) {
     // and occupancy.js's own history is that reading `isFull` alone there called a
     // full course free. So this field is fine, even required, for FÉRŐHELY status.
     // What it must never do is stand in for the student's own current relationship
-    // to the course - per AGENTS.md invariant 5, that is exactly the line
+    // to the course - per CLAUDE.md invariant 5, that is exactly the line
     // collectPlannerCourses' source classification (registered/waitlisted/planned)
     // has to respect, so that classifier deliberately does not read this field.
     //
@@ -199,7 +199,7 @@ function collectCourses(json, into) {
 //
 // `isOnWaitingList`, `isRegistered` and `isSigned` are the state fields required for
 // recognition. `willBeOnWaitingList` is deliberately never read here: per
-// AGENTS.md invariant 5, it forecasts a hypothetical NEW application, not this
+// CLAUDE.md invariant 5, it forecasts a hypothetical NEW application, not this
 // course's current status.
 const PLANNER_STATE_FIELDS = ["isOnWaitingList", "isRegistered", "isSigned"];
 
@@ -384,8 +384,15 @@ let generation = 0;
 let installed = false;
 const listeners = new Set();
 
+// Built once per change, not per call: every DOM tick of several modules reads it.
+// Every mutation below ends in notify(), which drops it. Read-only for consumers.
+let snapshot = null;
+
 function getSnapshot() {
-  return {
+  if (snapshot) {
+    return snapshot;
+  }
+  snapshot = {
     termId: activeTermId,
     subjects: new Map(subjects),
     courses: new Map(courses),
@@ -395,13 +402,15 @@ function getSnapshot() {
     // is allowed to say "no clash" - see the module comment at the top of this file.
     baselineComplete: plannerRecognized,
   };
+  return snapshot;
 }
 
 function notify() {
-  const snapshot = getSnapshot();
+  snapshot = null;
+  const current = getSnapshot();
   listeners.forEach(fn => {
     try {
-      fn(snapshot);
+      fn(current);
     } catch (e) {
       // An observer is advisory and must not break ingestion for the others.
     }

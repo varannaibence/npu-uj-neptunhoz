@@ -1,8 +1,8 @@
 // What the Rajtoló adds to the page itself: a switch on every course row and a count
 // badge on every subject row.
-const { toggleCourseInPlan, isCourseInPlan, savePlan } = require("./plan");
+const { toggleCourseInPlan, isCourseInPlan } = require("./plan");
 const { showToast } = require("../../toast");
-const { render } = require("./ui");
+const { render, persistPlan } = require("./ui");
 const utils = require("../../utils");
 const badge = require("../../badge");
 
@@ -51,14 +51,6 @@ const ROW_FLAG = "data-npu-rajtolo";
 const TABLE_ROW_SELECTOR = "[data-npu-course-row]";
 const TABLE_CODE_SELECTOR = "[data-npu-code-line]";
 const TABLE_ACTIONS_SELECTOR = "[data-npu-actions]";
-
-function persistPlan(state) {
-  savePlan(state.plan).then(saved => {
-    if (!saved) {
-      showToast("A Rajtoló terve nem menthető. Jelentkezz be újra.", "error");
-    }
-  });
-}
 
 function normaliseCode(value) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";

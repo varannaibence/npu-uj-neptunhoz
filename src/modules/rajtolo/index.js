@@ -31,7 +31,7 @@ const registrationData = require("../../registrationData");
 const { termIdFromUrl } = require("../creditBreakdown");
 
 const { collectSubjects, collectCourses, registeredCredits, emptyPlan, loadPlan } = plan;
-const { statusLabel, toastTone, msUntilTarget, wallClockToEpoch, formatCountdown, runTitle } = protocol;
+const { statusLabel, toastTone, wallClockToEpoch, countdownText, startChecks, runTitle } = protocol;
 const { createController, scheduleRun, summarize } = engine;
 const { render, openPlanner, buildLauncher, loadPeriods, loadPlannedCourses, selectedPeriod, dialogQuery } = ui;
 const { decorateCourseRows, decorateSubjectRows, rememberSubjectFromUrl } = rows;
@@ -339,6 +339,27 @@ function mount() {
   }
 }
 
+// Rewrites a lone text node in place, so the countdown ticking every second while
+// armed is a characterData change: the page-wide observers of the other modules watch
+// childList only, and `document.title =` or `textContent =` woke every one of them.
+function setText(element, text) {
+  const node = element && element.firstChild;
+  if (node && node.nodeType === Node.TEXT_NODE && !node.nextSibling) {
+    node.nodeValue = text;
+  } else if (element) {
+    element.textContent = text;
+  }
+}
+
+function setTitle(text) {
+  const title = document.querySelector("title");
+  if (title) {
+    setText(title, text);
+  } else {
+    document.title = text;
+  }
+}
+
 function onStartStop(state) {
   if (state.running) {
     // The non-negotiable safety rail: a visible Stop that actually stops. It
@@ -352,47 +373,35 @@ function onStartStop(state) {
     render(state);
     return;
   }
-  if (!interceptor.getAuthHeader()) {
-    state.statusText = "Nincs érzékelt bejelentkezés - jelentkezz be, majd nyisd meg újra ezt az oldalt.";
-    render(state);
-    return;
-  }
-  if (state.plan.subjects.length === 0) {
-    state.statusText = "Adj hozzá legalább egy tárgyat a listához.";
-    render(state);
-    return;
-  }
+  // The same checks the dialog lists. An already-past closing time makes the run
+  // pointless, and is reported as the clear local fact before any request.
   const target = wallClockToEpoch(state.plan.startAt);
-  if (Number.isNaN(target)) {
-    state.statusText = "Adj meg egy érvényes nyitási időpontot.";
-    render(state);
-    return;
-  }
-  // An already-past closing time makes the run pointless. A closed-period response
-  // is intentionally classified as unknown until its exact shape is measured, so
-  // report the clear local fact before making any request.
   const period = selectedPeriod(state);
-  const closeTarget = period ? wallClockToEpoch(period.toDate) : NaN;
-  if (!Number.isNaN(closeTarget) && msUntilTarget(closeTarget, interceptor.getServerOffsetMs(), Date.now()) <= 0) {
-    state.statusText = "A kiválasztott tárgyjelentkezési időszak már lezárult.";
+  const problem = startChecks({
+    hasAuth: Boolean(interceptor.getAuthHeader()),
+    subjectCount: state.plan.subjects.length,
+    startMs: target,
+    closeMs: period ? wallClockToEpoch(period.toDate) : NaN,
+    nowMs: Date.now() + (interceptor.getServerOffsetMs() || 0),
+  }).find(check => !check.ok);
+  if (problem) {
+    state.statusText = problem.problem;
     render(state);
     return;
   }
   state.controller = createController();
   state.running = true;
   state.sessionWarning = "";
-  state.statusText = "Ütemezve…";
+  state.statusText = "Maradj bejelentkezve ezen az oldalon; a visszaszámlálás a böngészőfül címében is látszik.";
   state.subjectStatus = new Map();
   render(state);
 
   const baseTitle = document.title;
   scheduleRun(target, state.plan, state.controller, {
     onTick: wait => {
-      document.title = runTitle(wait, false, baseTitle);
-      const statusLine = dialogQuery(state, `#${PLANNER_ID}-status`);
-      if (statusLine) {
-        statusLine.textContent = `Indulásig: ${formatCountdown(wait)}${state.sessionWarning}`;
-      }
+      setTitle(runTitle(wait, false, baseTitle));
+      setText(dialogQuery(state, `#${PLANNER_ID}-countdown`), countdownText(wait));
+      setText(dialogQuery(state, `#${PLANNER_ID}-session`), state.sessionWarning.replace(/^ – /, ""));
     },
     onSession: ok => {
       state.sessionWarning = ok
@@ -400,9 +409,11 @@ function onStartStop(state) {
         : " – A Neptun nem adott friss munkamenetet. Kattints valahova a Neptunban, vagy nézd meg, be vagy-e még jelentkezve.";
     },
     onEvent: (subject, kind, message) => {
-      document.title = runTitle(0, false, baseTitle);
+      setTitle(runTitle(0, false, baseTitle));
+      setText(dialogQuery(state, `#${PLANNER_ID}-countdown`), "Fut…");
       state.subjectStatus.set(subject.subjectId, kind);
-      if (kind !== "running") {
+      // Passing states: their final word comes later, with its own toast.
+      if (kind !== "running" && kind !== "sent" && kind !== "watching") {
         showToast(`${subject.title || "Ismeretlen tárgy"}: ${statusLabel(kind, message)}`, toastTone(kind));
       }
       const el = subjectStatusElement(state, subject.subjectId);
@@ -440,6 +451,11 @@ function initialize() {
     meta.options.find(option => option.id === "suggestions"),
     settings.readFlags()
   );
+  // The suggestions read the planner through it; the modules that otherwise install
+  // it can all be switched off. Idempotent.
+  if (suggestions) {
+    registrationData.install();
+  }
   function tick() {
     scheduled = false;
     if (location.pathname !== ROUTE) {

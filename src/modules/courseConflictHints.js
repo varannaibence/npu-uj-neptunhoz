@@ -37,7 +37,7 @@
 //   - "no clash" is only ever said once `baselineComplete` is true, i.e.
 //     GetScheduledCourses answered in a shape registrationData recognised. Saying
 //     "no clash" from an incomplete baseline would be the exact kind of confident
-//     false negative AGENTS.md invariant 5 warns against for a different field.
+//     false negative CLAUDE.md invariant 5 warns against for a different field.
 //   - an already enrolled course is omitted from this badge entirely; its native
 //     "Kurzus felvéve" state remains the authoritative visible status.
 //   - anything less than that - `baselineComplete === false`, or the candidate course
