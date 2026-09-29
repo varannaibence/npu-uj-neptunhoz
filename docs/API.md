@@ -207,6 +207,8 @@ A sikeres választest és a valóban betelt, nem várólistás elutasítás telj
 formája `[Ismeretlen]`, mert ezeket csak éles tárgyfelvételi időszakban lehet
 felelősen mérni. A Rajtoló ismeretlen vagy időtúllépéses válasznál megáll, nem
 könyvel találgatott sikert, és a már elküldött kérést nem próbálja visszavonni.
+Hogy a Neptun saját kliense milyen sikeres választ vár, azt a
+[bundle-ből kiolvasott rész](#api-bundle) írja le; ez sem mérés.
 
 `401` (lejárt token) esetén a Rajtoló friss tokent kér a Neptuntól, és a kérést
 **egyszer** újraküldi, hacsak közben le nem állították. Hogy egy 401-es
@@ -703,6 +705,84 @@ válasza a mért mintában ilyen tárgyak órarendjét is elérhetővé tette az
 A `RegisteredCourses/GetRegisteredCourses` endpoint továbbra is létezik az API-ban,
 de a tárgyfelvételi oldal nem indítja. A v3 a mért `GetScheduledCourses` választ
 használja a felvett kurzusok szűrésére.
+
+<a id="api-bundle"></a>
+
+## A natív kliens elvárásai — [Bundle-ből, nem mért]
+
+Forrás: a publikus Angular bundle (`main-*.js` és a belőle betöltött `chunk-*.js`
+fájlok), valamint a szintén belépés nélkül elérhető `GET Translations?lcid=1038`
+UI-szótár (unideb, 2026-09-29). Mindkettőt a login oldal is betölti; token nem
+kellett hozzájuk.
+
+Ez azt rögzíti, **amit a Neptun saját kliense a választól vár**, nem a szerver
+mért válaszát. A kód nem építhet rá döntést: ismeretlen válasznál a Rajtoló
+továbbra is megáll. A mérési kapukat a Fejlesztői mód Mérőmódja által gyűjtött
+minta zárhatja be (beküldése: [TESTED.md](TESTED.md#mérőmód-minta-a-még-nem-mért-válaszokról)).
+
+### Tárgyfelvételi hívások
+
+| Hívás                                                       | Kérés (a kliens kódjából)                                                   | Amit a kliens a válaszból olvas                                                                                  |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `POST SubjectApplication/SubjectSignin`                     | [mért](#api-subjectsignin)                                                  | a teljes burok: `data.indexLineId`, `data.isWaiting`, `data.signedCourses` (kurzusazonosító → kurzussor), `notification` |
+| `POST SubjectApplication/SubjectSignout`                    | `{ "indexLineId": "<index-line-id>" }`                                      | `data.isCompleted`, `data.isRetakeableCompletedSubject`, `data.unsignedCourses` (kurzusazonosító → kurzussor)   |
+| `POST SubjectApplication/CourseChange`                      | `{ "indexLineId": "<index-line-id>", "requestedCourseId": "<course-guid>" }` | `data`; a Felvett tárgyak oldal kurzuscsere-ablaka hívja                                                         |
+| `POST SubjectApplication/DeleteAllScheduledScheduledSubjects` | `{ "termId": "<term-id>" }` (hogy GUID vagy numerikus, nem ismert)          | `data`                                                                                                           |
+| `GET SubjectApplication/SystemParameters`                   | paraméter nélkül; a tárgyfelvételi oldal minden betöltéskor kéri            | `data.freeSignin`, `data.retakeableCompletedSubject`                                                             |
+
+A kliens a `SubjectSignin` válaszát így dolgozza fel:
+
+```json
+{
+  "data": {
+    "indexLineId": "<index-line-id>",
+    "isWaiting": false,
+    "signedCourses": {
+      "<course-guid>": { "isSigned": true, "registeredStudentsCount": 0, "waitingStudentsCount": 0 }
+    }
+  },
+  "notification": []
+}
+```
+
+- Minden nem hibás (2xx) választ felvételnek vesz: a tárgyat `isRegistered: true`
+  és `isWaiting: data.isWaiting` állapotba teszi. A „Sikeres tárgyfelvétel!”
+  szöveget a saját szótárából veszi, és csak akkor mutatja, ha a `notification[]`
+  üres. A nem 2xx válasz a globális hibakezelőhöz megy.
+- Írás után a kurzus `isFull` értékét maga számolja:
+  `registeredStudentsCount + waitingStudentsCount >= maxLimit + maxWaitingStrength`.
+  Ez a kliens képlete. Az NPU továbbra is a szerver `isFull` és
+  `willBeOnWaitingList` mezőjét olvassa, férőhely-aritmetikát nem végez.
+- **Nyitott kérdés az NPU-nak:** a Rajtoló a 2xx + `data` + nem üres, hibát nem
+  jelző (`type` ≠ 3) `notification[]` választ ismeretlennek veszi, és megáll; a
+  natív kliens ugyanezt felvételnek tekinti. Hogy ilyen válasz élesben előfordul-e
+  (például várólistás felvételnél), első mért mintáig nem tudjuk.
+
+### Háttérben futó felvétel
+
+- A natív tervezőlista az `isInProgress: true` tárgyakat külön, „felvétel
+  folyamatban” csoportba teszi. A mező a `SchedulableSubjects` soraiban mérten
+  `false` volt.
+- A szótár szövege (`subjects.subjectApplicationInProgressError`): „Nem
+  kezdeményezhető párhuzamosan több tárgy felvétele. Amíg a háttérben az egyik
+  tárgy felvételének folyamata nem zárult le, addig várni kell az újabb tárgy
+  felvételével.” A natív felvétel előtt megerősítő ablak jön („Egyszerre csak egy
+  tárgyfelvételi folyamat indítható el…”); elrejtését a
+  `POST ContextUserProfile/SaveSubjectSigninWarningModalsStates` menti.
+- Következtetés, nem mérés: egyes beállításoknál a szerver sorba állíthatja a
+  felvételt. A Rajtoló eleve sorosan küld, és mindig megvárja az előző választ.
+
+### Amit a bundle nem ad
+
+A szerver üzleti szövegei (`notification[].description`) sem a bundle-ben, sem a
+szótárban nincsenek benne; a mért „Jelenleg nincs tárgyjelentkezési időszak!”
+sem. A sikeres válasz tényleges törzse és a valóban betelt kurzus elutasítása
+ezért innen nem ismerhető meg, csak éles mérésből.
+
+Új Neptun-verziónál így nyerhető ki újra: a `main-*.js`-től indulva le kell tölteni
+az összes hivatkozott `chunk-*.js` fájlt, és ki kell keresni a
+`` httpClient.<metódus>(`${…apiServer.url}<Controller>/<Action>` `` mintákat. A
+2026-09-29-i unideb-bundle 452 ilyen hívást tartalmaz.
 
 ## Kapcsolódó dokumentumok
 
