@@ -1,40 +1,39 @@
-// "Rajtoló" - scheduled automatic course registration. The user ranks subjects and,
-// within each, the acceptable courses per group; at the set moment the script walks
-// the list and fires SubjectSignin POSTs itself.
-//
-// Four hazards drive every non-obvious choice here: the clock, the session, pace, and
-// ranking-only courses. Nothing fires without an explicit button press.
+// Rajtoló: a saved, ranked course plan and a dialog to click through it. One click
+// registers one subject with the same two requests a registration by hand makes: a
+// fresh course list and a SubjectSignin. It never registers by itself: no timer, no
+// background watching, no resend of the same course.
 //
 // This file holds only the wiring: the shared state, the interceptor handlers that
 // feed it, and mounting. The parts live next door -
 //   plan.js      the plan's data and every pure transformation of it
-//   protocol.js  what the server's answers mean, which combination to send next
-//   engine.js    the run itself, with its effects injected
-//   net.js       this module's own authenticated calls
-//   ui.js        the planner dialog
-//   rows.js      the switch and badge added to the page
+//   protocol.js  which courses a click sends, and what Neptun's answers mean
+//   engine.js    one click, with its requests injected
+//   net.js       this module's own authenticated requests
+//   ui.js        the dialog
+//   rows.js      the switch and the badge on the page
+//   suggest.js   the timetable suggestions
 const interceptor = require("../../interceptor");
 const router = require("../../router");
 const storage = require("../../storage");
 const utils = require("../../utils");
 const devlog = require("../../devlog");
-const { ROUTE, FILTER_BUTTON_ID, LAUNCHER_ID, PLANNER_ID } = require("./constants");
+const { showToast } = require("../../toast");
+const { ROUTE, FILTER_BUTTON_ID, LAUNCHER_ID } = require("./constants");
 const { SUBJECTS_ENDPOINT, COURSES_ENDPOINT, CREDITS_ENDPOINT } = require("./constants");
 const plan = require("./plan");
 const protocol = require("./protocol");
 const engine = require("./engine");
+const { liveGet, livePost, withRenewal, freshenAuth } = require("./net");
 const ui = require("./ui");
 const rows = require("./rows");
 const suggest = require("./suggest");
 const settings = require("../../settings");
-const { showToast } = require("../../toast");
 const registrationData = require("../../registrationData");
 const { termIdFromUrl } = require("../creditBreakdown");
 
 const { collectSubjects, collectCourses, registeredCredits, emptyPlan, loadPlan } = plan;
-const { statusLabel, toastTone, wallClockToEpoch, countdownText, startChecks, runTitle } = protocol;
-const { createController, scheduleRun, summarize } = engine;
-const { render, openPlanner, buildLauncher, loadPeriods, loadPlannedCourses, selectedPeriod, dialogQuery } = ui;
+const { outcomeText, outcomeTone, DONE } = protocol;
+const { render, openPlanner, buildLauncher } = ui;
 const { decorateCourseRows, decorateSubjectRows, rememberSubjectFromUrl } = rows;
 
 // Shown in the settings panel; `id` is also the key the switch is stored under.
@@ -43,8 +42,9 @@ const meta = {
   group: "rajtolo",
   name: "Rajtoló",
   where: "Tárgyak › Tárgyfelvétel: „Rajtoló” gomb a szűrők mellett, „Rajtolóhoz” kapcsoló a kurzusoknál",
-  description: "Ütemezett tárgyfelvétel: saját tárgy- és kurzussorrend, amit a megadott időpontban sorban beküld.",
-  // Only the credit forecast needs this; the run itself does not.
+  description:
+    "Mentett kurzussorrend tartalékkurzusokkal. Az ablakában egy kattintás egy tárgy: friss kurzuslista, és felvétel a sorrended szerinti szabad kurzusokkal. Magától semmit nem küld el.",
+  // Only the credit forecast needs this.
   needs: [
     {
       capability: "scheduledSubjects",
@@ -67,15 +67,6 @@ function shouldActivate() {
   return true;
 }
 
-function subjectStatusElement(state, subjectId) {
-  if (!state.dialog) {
-    return null;
-  }
-  return Array.from(state.dialog.content.querySelectorAll("[data-npu-subject-status]")).find(
-    element => element.getAttribute("data-npu-subject-status") === subjectId
-  );
-}
-
 // Two lifetimes, hence two functions.
 //
 // The state, its handlers and its observer must exist exactly ONCE per page load:
@@ -92,67 +83,46 @@ function ensureState() {
     return plannerState;
   }
   const created = {
-    // Null while the dialog is closed. A run keeps going either way, so everything
-    // that paints checks this first.
+    // Null while the dialog is closed; rendering is skipped then.
     dialog: null,
     plan: emptyPlan(null),
     subjectCatalog: new Map(),
     courseCatalog: new Map(),
-    courseLoads: new Set(),
-    courseLoadErrors: new Set(),
-    courseLoadQueue: null,
-    subjectStatus: new Map(),
-    running: false,
     statusText: "",
-    controller: null,
-    // Appended to the countdown when the page would not renew the session.
-    sessionWarning: "",
-    // Kept off `plan` on purpose, so it never round-trips through storage: in-memory
-    // only, refetched next time the planner opens.
-    periods: null,
-    periodsTermId: null,
-    periodsLoadingTermId: null,
-    periodsStatus: "idle",
-    periodsError: null,
-    periodsErrorReason: null,
-    selectedPeriodId: null,
+    // The click in progress (one at a time), its step, and each subject's last result.
+    busySubjectId: null,
+    stepText: "",
+    flowToken: 0,
+    subjectStatus: new Map(),
+    // Which <details> the student opened, so a rebuild keeps them open.
+    openDetails: new Set(),
+    nextFocus: null,
     catalogTermId: null,
     // The numeric request.termId of the last subject list: an empty list names no
     // term GUID, so only this shows that the page moved to another term.
     catalogRequestTermId: null,
     planLoadedForIdentity: null,
-    courseCatalogGeneration: 0,
     // Null until a response has been seen; this module never issues that request
     // itself, only rides creditBreakdown's.
     registeredCredits: null,
     registeredCreditsTermId: null,
-    onStartStop: () => onStartStop(plannerState),
+    onRegister: subjectId => onRegister(plannerState, subjectId),
   };
   // Claimed before a single handler is registered: a second ensureState() must find
   // it already set.
   plannerState = created;
 
   function resetForTerm(state, termId) {
-    if (state.running && state.controller) {
-      state.statusText = "Leállítás folyamatban…";
-      state.controller.stop();
-    }
+    // A click in flight belongs to the old term or user: its result is dropped.
+    state.flowToken++;
+    state.busySubjectId = null;
+    state.stepText = "";
+    state.subjectStatus = new Map();
     state.catalogTermId = termId || null;
-    state.courseCatalogGeneration++;
     state.plan = emptyPlan(termId);
     state.planLoadedForIdentity = null;
     state.subjectCatalog = new Map();
     state.courseCatalog = new Map();
-    state.courseLoads.clear();
-    state.courseLoadErrors.clear();
-    state.subjectStatus = new Map();
-    state.periods = null;
-    state.periodsTermId = null;
-    state.periodsLoadingTermId = null;
-    state.periodsStatus = "idle";
-    state.periodsError = null;
-    state.periodsErrorReason = null;
-    state.selectedPeriodId = null;
   }
 
   function adoptStoredPlan(state, termId) {
@@ -173,9 +143,6 @@ function ensureState() {
         state.plan = loadPlan(termId);
         state.planLoadedForIdentity = identity;
         render(state);
-        if (state.dialog) {
-          loadPlannedCourses(state);
-        }
       })
       .catch(() => {
         // No persisted plan is safer than guessing that storage is ready.
@@ -230,46 +197,19 @@ function ensureState() {
     if (incoming && plannerState.catalogTermId && plannerState.catalogTermId !== incoming.termId) {
       resetForTerm(plannerState, incoming.termId);
     } else if (movedToEmptyTerm) {
-      // Otherwise the previous term's plan would stay armable on a term with no subjects.
+      // Otherwise the previous term's plan would stay usable on a term with no subjects.
       resetForTerm(plannerState, null);
     } else if (incoming && !plannerState.catalogTermId) {
       plannerState.catalogTermId = incoming.termId;
     }
     plannerState.subjectCatalog = collectSubjects(json, plannerState.subjectCatalog);
     const first = plannerState.subjectCatalog.values().next().value;
-    // Only adopt the stored plan while ours is untouched: a later refresh - the
-    // course checkbox triggers one - would overwrite what the user just picked.
+    // Only adopt the stored plan while ours is untouched: a later refresh would
+    // overwrite what the user just picked.
     if (first && plannerState.plan.subjects.length === 0) {
       adoptStoredPlan(plannerState, first.termId);
     }
     render(plannerState);
-    if (plannerState.dialog) {
-      loadPlannedCourses(plannerState);
-    }
-  });
-  // A renewed token is the same user and the run carries on: net.js reads the header
-  // afresh for every request. Only logout or another login stops it.
-  interceptor.onAuthChange((auth, info) => {
-    // A boundary FROM no known session is the first sight of one, not a switch: a
-    // token without a readable SessionId would otherwise stop the run at every renewal.
-    // Logout (no header) always stops it.
-    if (plannerState.running && info && info.userBoundary && (!auth || info.previousSessionId)) {
-      plannerState.statusText = auth
-        ? "Új munkamenet érzékelve; a futás leállt."
-        : "A munkamenet lejárt; a futás leállt.";
-      if (plannerState.controller) {
-        plannerState.controller.stop();
-      }
-      render(plannerState);
-    }
-    if (auth && plannerState.dialog) {
-      if (plannerState.periodsErrorReason === "auth-required") {
-        loadPeriods(plannerState, true);
-      }
-      if (plannerState.courseLoadErrors.size > 0) {
-        loadPlannedCourses(plannerState, true);
-      }
-    }
   });
   interceptor.onResponse(COURSES_ENDPOINT, (json, info) => {
     if (!registrationData.isSuccessfulCollection(json, info && info.status)) {
@@ -284,14 +224,13 @@ function ensureState() {
       plannerState.catalogTermId = incoming.termId;
     }
     plannerState.courseCatalog = collectCourses(json, plannerState.courseCatalog);
-    // The URL carries all four ids SubjectSignin needs, so the row switch does not
-    // depend on the subject also being in the SchedulableSubjects catalogue.
+    // The URL carries the subject's four ids, so the row switch does not depend on the
+    // subject also being in the SchedulableSubjects catalogue.
     rememberSubjectFromUrl(plannerState, info && info.url);
     decorateCourseRows(plannerState);
     decorateSubjectRows(plannerState);
     render(plannerState);
   });
-
   // Rows are re-rendered as subjects expand and collapse, so the switches have to be
   // re-attached on any DOM change. decorateCourseRows is a no-op once a row carries
   // one, which keeps this from retriggering itself.
@@ -311,6 +250,79 @@ function ensureState() {
   }).observe(document.documentElement, { childList: true, subtree: true });
 
   return plannerState;
+}
+
+// The first subject after `subject` still waiting for its click.
+function nextPending(state, subject) {
+  const index = state.plan.subjects.indexOf(subject);
+  return state.plan.subjects.slice(index + 1).find(item => {
+    const outcome = state.subjectStatus.get(item.subjectId);
+    const record = state.subjectCatalog.get(item.subjectId);
+    return !(outcome && DONE.includes(outcome.kind)) && !(record && record.isRegistered) && item.groups.length > 0;
+  });
+}
+
+// Neptun renews its token only on its own request; ours would go out on a dead one.
+function tokenExpired() {
+  const timing = interceptor.getAuthTiming();
+  return (
+    !interceptor.getAuthHeader() ||
+    (Boolean(timing) && typeof timing.expiresAtMs === "number" && timing.expiresAtMs <= Date.now())
+  );
+}
+
+// One click, one subject. Only one at a time: Neptun forbids parallel registrations.
+async function onRegister(state, subjectId, run = engine.registerSubject) {
+  const subject = state.plan.subjects.find(item => item.subjectId === subjectId);
+  if (state.busySubjectId || !subject) {
+    return;
+  }
+  const token = ++state.flowToken;
+  const identity = utils.getNeptunCode();
+  const gone = () => state.flowToken !== token || location.pathname !== ROUTE || utils.getNeptunCode() !== identity;
+  // By plan position, not by name: the log may end up in a bug report.
+  const position = state.plan.subjects.indexOf(subject) + 1;
+  state.busySubjectId = subjectId;
+  state.stepText = "";
+  state.subjectStatus.delete(subjectId);
+  render(state);
+  devlog.log("rajtolo", `felvétel: #${position}`);
+  // An expired token is renewed first, through Neptun's own search button, and a 401
+  // gets one renewal and one resend, as Neptun's own client does.
+  const session = { needsRenewal: tokenExpired, renew: freshenAuth, shouldContinue: () => !gone() };
+  let outcome;
+  try {
+    outcome = await run(subject, state, {
+      get: withRenewal(liveGet, session),
+      post: withRenewal(livePost, session),
+      report: text => {
+        if (!gone()) {
+          state.stepText = text;
+          render(state);
+        }
+      },
+      stopped: gone,
+    });
+  } catch (error) {
+    devlog.error("rajtolo felvétel", error);
+    outcome = { kind: "failed", message: "Váratlan hiba; nézd meg a Neptunban." };
+  }
+  if (state.flowToken !== token) {
+    return;
+  }
+  state.busySubjectId = null;
+  state.stepText = "";
+  state.subjectStatus.set(subjectId, outcome);
+  devlog.log("rajtolo", `felvétel: #${position} ${outcome.kind}`);
+  const next = DONE.includes(outcome.kind) ? nextPending(state, subject) : subject;
+  state.nextFocus = next ? `go-${next.subjectId}` : null;
+  if (!state.dialog) {
+    showToast(
+      `${subject.title || subject.code || "Ismeretlen tárgy"}: ${outcomeText(outcome)}`,
+      outcomeTone(outcome.kind)
+    );
+  }
+  render(state);
 }
 
 // Re-inserted whenever Angular gives us a toolbar. Idempotent, so the observer can
@@ -338,137 +350,6 @@ function mount() {
   } catch (e) {
     // fail quietly: no launcher, never a throw inside Angular's rendering.
   }
-}
-
-// Rewrites a lone text node in place, so the countdown ticking every second while
-// armed is a characterData change: the page-wide observers of the other modules watch
-// childList only, and `document.title =` or `textContent =` woke every one of them.
-function setText(element, text) {
-  const node = element && element.firstChild;
-  if (node && node.nodeType === Node.TEXT_NODE && !node.nextSibling) {
-    node.nodeValue = text;
-  } else if (element) {
-    element.textContent = text;
-  }
-}
-
-function setTitle(text) {
-  const title = document.querySelector("title");
-  if (title) {
-    setText(title, text);
-  } else {
-    document.title = text;
-  }
-}
-
-function onStartStop(state) {
-  if (state.running) {
-    // The non-negotiable safety rail: a visible Stop that actually stops. It
-    // prevents anything further from being scheduled - an attempt already in
-    // flight has already reached the server and can't be un-sent, only its
-    // *next* step is what Stop actually cancels.
-    state.statusText = "Leállítás folyamatban…";
-    devlog.log("rajtolo", "leállítás kérve");
-    if (state.controller) {
-      state.controller.stop();
-    }
-    render(state);
-    return;
-  }
-  // The same checks the dialog lists. An already-past closing time makes the run
-  // pointless, and is reported as the clear local fact before any request.
-  const target = wallClockToEpoch(state.plan.startAt);
-  const period = selectedPeriod(state);
-  const problem = startChecks({
-    hasAuth: Boolean(interceptor.getAuthHeader()),
-    subjectCount: state.plan.subjects.length,
-    startMs: target,
-    closeMs: period ? wallClockToEpoch(period.toDate) : NaN,
-    nowMs: Date.now() + (interceptor.getServerOffsetMs() || 0),
-  }).find(check => !check.ok);
-  if (problem) {
-    state.statusText = problem.problem;
-    devlog.log("rajtolo", `nem élesíthető: ${problem.problem}`);
-    render(state);
-    return;
-  }
-  state.controller = createController();
-  state.running = true;
-  state.sessionWarning = "";
-  state.statusText = "Maradj bejelentkezve ezen az oldalon; a visszaszámlálás a böngészőfül címében is látszik.";
-  state.subjectStatus = new Map();
-  render(state);
-
-  devlog.log(
-    "rajtolo",
-    `élesítve: ${state.plan.subjects.length} tárgy, nyitás ${state.plan.startAt}, ` +
-      `szerveróra-eltérés ${interceptor.getServerOffsetMs()} ms, mód: ${state.plan.waitlistMode}`
-  );
-  // By plan position, not by name: the log may end up in a bug report.
-  const position = subject => state.plan.subjects.findIndex(item => item.subjectId === subject.subjectId) + 1;
-  const baseTitle = document.title;
-  scheduleRun(target, state.plan, state.controller, {
-    onTick: wait => {
-      setTitle(runTitle(wait, false, baseTitle));
-      setText(dialogQuery(state, `#${PLANNER_ID}-countdown`), countdownText(wait));
-      setText(dialogQuery(state, `#${PLANNER_ID}-session`), state.sessionWarning.replace(/^ – /, ""));
-    },
-    onSession: ok => {
-      devlog.log("auth", `Rajtoló munkamenet-frissítés: ${ok ? "sikerült" : "nem sikerült"}`);
-      state.sessionWarning = ok
-        ? ""
-        : " – A Neptun nem adott friss munkamenetet. Kattints valahova a Neptunban, vagy nézd meg, be vagy-e még jelentkezve.";
-    },
-    onEvent: (subject, kind, message) => {
-      devlog.log(
-        "rajtolo",
-        `#${position(subject)} ${kind}${message ? `: ${devlog.maskText(message, utils.getNeptunCode())}` : ""}`
-      );
-      setTitle(runTitle(0, false, baseTitle));
-      setText(dialogQuery(state, `#${PLANNER_ID}-countdown`), "Fut…");
-      state.subjectStatus.set(subject.subjectId, kind);
-      // Passing states: their final word comes later, with its own toast.
-      if (kind !== "running" && kind !== "sent" && kind !== "watching") {
-        showToast(`${subject.title || "Ismeretlen tárgy"}: ${statusLabel(kind, message)}`, toastTone(kind));
-      }
-      const el = subjectStatusElement(state, subject.subjectId);
-      if (el) {
-        el.textContent = statusLabel(kind, message);
-      }
-    },
-    onDone: outcomes => {
-      state.running = false;
-      // Stopped before the start: keep a reason already shown, such as a logout.
-      const stopped = Boolean(state.controller && state.controller.stopped);
-      const counts = {};
-      outcomes.forEach(outcome => {
-        counts[outcome.kind] = (counts[outcome.kind] || 0) + 1;
-      });
-      devlog.log(
-        "rajtolo",
-        `vége${stopped ? " (leállítva)" : ""}: ${
-          Object.entries(counts)
-            .map(([kind, count]) => `${kind} ×${count}`)
-            .join(", ") || "nincs eredmény"
-        }`
-      );
-      const stoppedEarly = outcomes.length === 0 && stopped;
-      state.statusText = !stoppedEarly
-        ? summarize(outcomes, stopped)
-        : state.statusText === "Leállítás folyamatban…"
-          ? "Leállítva a felhasználó által."
-          : state.statusText;
-      state.controller = null;
-      render(state);
-      // A hidden tab keeps the "done" mark until the user looks at it.
-      if (outcomes.length > 0 && document.hidden) {
-        document.title = runTitle(0, true, baseTitle);
-        document.addEventListener("visibilitychange", () => (document.title = baseTitle), { once: true });
-      } else {
-        document.title = baseTitle;
-      }
-    },
-  });
 }
 
 function initialize() {
@@ -502,17 +383,7 @@ function initialize() {
   }
   // Router-gated plus an observer: the filter button can arrive after a direct load
   // just as easily as after an in-app navigation.
-  router.onChange(path => {
-    if (path !== ROUTE && plannerState && plannerState.running) {
-      if (plannerState.dialog) {
-        plannerState.dialog.close();
-      } else if (plannerState.controller) {
-        plannerState.statusText = "Leállítás folyamatban…";
-        plannerState.controller.stop();
-      }
-    }
-    scheduleTick();
-  });
+  router.onChange(scheduleTick);
   new MutationObserver(scheduleTick).observe(document.documentElement, { childList: true, subtree: true });
   scheduleTick();
 }
@@ -521,11 +392,10 @@ module.exports = {
   meta,
   shouldActivate,
   initialize,
+  onRegister,
   // pure logic, re-exported so selfcheck.js has one entry point
   collectSubjects: plan.collectSubjects,
   collectCourses: plan.collectCourses,
-  collectPeriods: plan.collectPeriods,
-  periodLoadResult: plan.periodLoadResult,
   registeredCredits: plan.registeredCredits,
   plannedCredits: plan.plannedCredits,
   mergeCredits: plan.mergeCredits,
@@ -533,7 +403,6 @@ module.exports = {
   toMinutes: plan.toMinutes,
   slotsOverlap: plan.slotsOverlap,
   findPlanConflicts: plan.findPlanConflicts,
-  toDateTimeLocal: plan.toDateTimeLocal,
   emptyPlan: plan.emptyPlan,
   addSubject: plan.addSubject,
   removeSubject: plan.removeSubject,
@@ -545,22 +414,12 @@ module.exports = {
   swapCourses: plan.swapCourses,
   plannedCount: rows.plannedCount,
   subjectCodeIn: rows.subjectCodeIn,
-  classifyResponse: protocol.classifyResponse,
-  chooseCombination: protocol.chooseCombination,
-  validateCourseList: protocol.validateCourseList,
-  toastTone: protocol.toastTone,
-  msUntilTarget: protocol.msUntilTarget,
+  pickCourse: protocol.pickCourse,
+  preselection: protocol.preselection,
+  signinOutcome: protocol.signinOutcome,
+  outcomeText: protocol.outcomeText,
   wallClockToEpoch: protocol.wallClockToEpoch,
-  defaultPeriod: protocol.defaultPeriod,
-  formatCountdown: protocol.formatCountdown,
-  runTitle: protocol.runTitle,
-  statusLabel: protocol.statusLabel,
   courseLabel: protocol.courseLabel,
-  runSubject: engine.runSubject,
-  runPlan: engine.runPlan,
-  summarize: engine.summarize,
-  submissionOutcome: protocol.submissionOutcome,
-  createController: engine.createController,
   planTargets: suggest.planTargets,
   solverInput: suggest.solverInput,
   applyVariant: suggest.applyVariant,

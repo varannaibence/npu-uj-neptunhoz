@@ -227,7 +227,7 @@ let openDialog = null;
 // a user trapped in a popup our script drew would rightly be alarmed.
 //
 // Only one NPU dialog exists at a time; opening a second closes the first - unless
-// the first says it is busy (`options.busy()` returns why, e.g. an armed Rajtoló that
+// the first says it is busy (`options.busy()` returns why, e.g. a Rajtoló click that
 // closing would stop). Then the new one is refused with that reason, and null returned.
 function open(options) {
   injectCss();
@@ -382,8 +382,8 @@ function open(options) {
     options.actions.forEach(action => {
       const button = actionButton(action.label, action.primary);
       button.addEventListener("click", () => {
-        // Returning false keeps the dialog open - what a Start button needs, since
-        // the run it kicks off is what the dialog shows.
+        // Returning false keeps the dialog open, for an action whose result the
+        // dialog itself shows.
         const keepOpen = action.onClick && action.onClick() === false;
         if (!keepOpen) {
           close();
@@ -408,8 +408,7 @@ function open(options) {
   }
   dialog.focus();
 
-  // Handed back so a caller can relabel a footer action while the dialog is open -
-  // the Rajtoló's one button is both Start and Stop.
+  // Handed back so a caller can relabel a footer action while the dialog is open.
   const handle = { close, content: contentBody, dialog, buttons, busy: options.busy };
   openDialog = handle;
   return handle;

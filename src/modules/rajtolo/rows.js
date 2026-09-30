@@ -6,9 +6,9 @@ const { render, persistPlan } = require("./ui");
 const utils = require("../../utils");
 const badge = require("../../badge");
 
-// Records a subject from a GetSubjectsCourses request URL. That URL carries exactly
-// the four ids SubjectSignin needs, so the row switch works without waiting for the
-// subject to turn up in a SchedulableSubjects page.
+// Records a subject from a GetSubjectsCourses request URL. That URL carries the
+// subject's four ids, so the row switch works without waiting for the subject to turn
+// up in a SchedulableSubjects page.
 function rememberSubjectFromUrl(state, url) {
   if (!url) {
     return;
@@ -131,12 +131,6 @@ function decorateCourseRows(state) {
         }
         if (!utils.getNeptunCode()) {
           showToast("A felhasználó azonosítása még nem készült el. Próbáld újra egy pillanat múlva.", "error");
-          return;
-        }
-        // An armed run sends the plan it was started with: a change now would not
-        // reach it, so it is refused rather than shown as done.
-        if (state.running) {
-          showToast("A Rajtoló fut; a terv csak leállítás után módosítható.", "error");
           return;
         }
         state.plan = toggleCourseInPlan(state.plan, record, hit.course);

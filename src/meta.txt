@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           Neptun PowerUp!
 // @namespace      http://example.org
-// @description    Felturbózza a Neptun-odat
+// @description    Férőhely, ütközések, tárgyfelvétel a te sorrendedben: hallgatóktól hallgatóknak az új Neptunhoz
 // @author         Mate Solymosi; új Neptun átírás: Varannai Bence
 // @version        <version>
 // @icon           https://raw.githubusercontent.com/varannaibence/npu-uj-neptunhoz/master/docs/assets/icon-128.png

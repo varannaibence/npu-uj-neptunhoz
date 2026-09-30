@@ -367,7 +367,7 @@ function patchXhr(target) {
     ["error", "timeout", "abort"].forEach(outcome => this.addEventListener(outcome, traffic(outcome)));
     this.addEventListener("load", () => {
       // API answers only: a cached asset or another host's response carries a Date
-      // that is not Neptun's clock now, and the Rajtoló schedules against this.
+      // that is not Neptun's clock now, and the developer log's server time uses this.
       if (getEndpoint(this.__npuUrl || this.url) && typeof this.getResponseHeader === "function") {
         recordServerDate(this.getResponseHeader("Date"));
       }

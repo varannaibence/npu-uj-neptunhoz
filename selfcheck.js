@@ -33,11 +33,21 @@ const otherRunnableTests = runnableTests.filter(({ file }) => file !== path.join
 // just because this file was not updated.
 const allRunnableTests = [...otherRunnableTests, ...lastRunnableTests];
 
-// A rejection must exit non-zero, or a broken engine would still look like a pass.
+// A rejection must exit non-zero, or a broken check would still look like a pass. So
+// must a check that never settles: Node exits quietly with code 0 once nothing is
+// left to run, which made a hung await look like a pass.
+let finished = false;
+process.on("exit", code => {
+  if (!finished && code === 0) {
+    console.error("selfcheck: an async check never finished");
+    process.exitCode = 1;
+  }
+});
 allRunnableTests
   .reduce((promise, { testModule }) => promise.then(() => testModule.run()), Promise.resolve())
   .then(
     () => {
+      finished = true;
       console.log("selfcheck: OK");
     },
     error => {

@@ -542,9 +542,6 @@ async function runCrossTabSaveCheck() {
   }
 }
 
-// The engine checks are async (runSubject/runPlan await their injected deps), so they
-// run last and the success line waits for them. A rejection must exit non-zero -
-
 // The async checks run in this order on purpose: each leaves storage in a known
 // state for the next.
 async function run() {
