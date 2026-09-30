@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="docs/assets/npu-icon.svg" width="96" height="96" alt="">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/npu-logo-dark.svg">
+  <img src="docs/assets/npu-logo.svg" width="96" alt="">
+</picture>
 
 # Neptun PowerUp!
 

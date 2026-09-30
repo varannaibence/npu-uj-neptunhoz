@@ -2,6 +2,9 @@
 
 ## Következő kiadás
 
+- Új logó: dőlt N, a jobb szára felfelé mutató nyíl, a bal szára villám. Ez
+  jelöli az NPU gombjait a Neptunban, és ez látszik a Tampermonkeyben is.
+
 ## 3.3.0 — 2026. szept. 30. <a name="v3.3.0"></a>
 
 **Rajtoló**
