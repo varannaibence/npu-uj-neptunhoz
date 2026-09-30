@@ -18,6 +18,7 @@ Ez a fájl a projekt intézményi kompatibilitásának egyetlen nyilvántartása
 | Intézmény | Neptun NG host | Állapot | Ellenőrizve |
 | --- | --- | --- | --- |
 | Debreceni Egyetem | `www-h-ng.neptun.unideb.hu` | 🟡 Részlegesen ellenőrizve | 2026-09-19 |
+| Miskolci Egyetem | `neptunweb1.uni-miskolc.hu` | 🟡 Részlegesen ellenőrizve | 2026-09-29 |
 
 ## Működik nálad? Jelezd
 
@@ -43,7 +44,8 @@ kurzuscseréét. Ezekből egyetlen minta is sokat segít.
 1. Az NPU beállításaiban (a lap alján, **NPU beállítások**) kapcsold be a
    **Fejlesztői mód** kapcsolót a Fejlesztői eszközök csoportban (alatta a
    **Mérőmód** alapból be van kapcsolva), és mentsd.
-2. Vedd fel a tárgyaidat úgy, ahogy amúgy is tennéd, kézzel vagy a Rajtolóval.
+2. Vedd fel a tárgyaidat úgy, ahogy amúgy is tennéd: kézzel, vagy a Rajtoló
+   **Felvétel** gombjával.
    A Mérőmód csak figyel, magától semmit nem küld el. Új mintánál értesítést
    látsz.
 3. A Tampermonkey menüjében válaszd az **NPU fejlesztői eszközök** pontot, és a

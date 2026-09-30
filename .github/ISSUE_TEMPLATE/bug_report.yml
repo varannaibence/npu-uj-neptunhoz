@@ -1,0 +1,68 @@
+name: Hibajelentés
+description: Valami nem működik, vagy rosszul működik az NPU-ban
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Köszi, hogy szólsz. Minél pontosabban leírod, mi történt, annál hamarabb megtaláljuk a hibát.
+
+        **Ne másolj be jelszót, sütit, `Authorization` fejlécet, tokent vagy teljes hálózati exportot (HAR), és ne tölts fel személyes kurzus- vagy fiókadatot.** Ha a hiba szövegében ilyen van, töröld ki vagy maszkold (`<token>`, `<neptun-kód>`).
+  - type: dropdown
+    id: module
+    attributes:
+      label: Melyik modul érintett?
+      options:
+        - Rajtoló
+        - Férőhely / várólista
+        - Kreditbontás
+        - Beállítás-panel
+        - Egyéb / nem tudom
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Mi történt?
+      description: Mit csináltál, mit vártál, és mit láttál helyette? Képernyőkép jöhet (személyes adat nélkül).
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Hogyan tudjuk előidézni?
+      placeholder: |
+        1. Megnyitom a Tárgyfelvétel oldalt
+        2. …
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: NPU verzió
+      description: A lap alján, a beállítás-panelen vagy a Tampermonkey szkriptlistájában látod.
+      placeholder: "3.1.3"
+    validations:
+      required: true
+  - type: input
+    id: neptun
+    attributes:
+      label: Intézmény és Neptun-felület
+      description: Csak a domain (pl. `neptun.egyetem.hu`), és hogy a `/hallgato_ng/` felületen vagy-e.
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Böngésző és Tampermonkey verzió
+      placeholder: "Chrome 130, Tampermonkey 5.3"
+    validations:
+      required: false
+  - type: textarea
+    id: console
+    attributes:
+      label: Konzolhiba (ha van)
+      description: F12 → Console. Csak az `NPU`-s vagy piros sorok, titkok nélkül.
+      render: text
+    validations:
+      required: false
