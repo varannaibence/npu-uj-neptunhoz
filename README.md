@@ -43,6 +43,23 @@ működik.
   <br><sub>A Rajtoló ablaka, példaadatokkal.</sub>
 </p>
 
+## Amiért csináljuk
+
+Nem az egyetem vagy a Neptun ellen dolgozunk. Azt szeretnénk, hogy a
+tárgyfelvétel és a félév kevesebb stresszel járjon: lásd előre, hol van hely és
+mi ütközik, tudj nyugodtan órarendet tervezni, és ne kelljen ugyanazt tízszer
+kikattintanod. Minden más funkció is ezt szolgálja, a „Mi van ma?” kártyáktól a
+színezésig.
+
+Ezért van, amit akkor sem építünk be, ha technikailag menne:
+
+- nem küldünk kérést helyetted, időzítve vagy a háttérben;
+- nem terheljük a Neptun szerverét jobban, mint amikor kézzel kattintasz;
+- nem kerüljük meg a belépést, a kétlépcsős azonosítást vagy a CAPTCHA-t.
+
+Ha egy ötlet ezek közül bármelyikbe ütközik, nem kerül be, akármilyen kényelmes
+lenne. Részletek: [Felelősség és használat](docs/FELELOSSEG.md).
+
 ## Funkciók
 
 Minden funkció (a lábléc kivételével, mert azon át nyílik a panel) egyenként

@@ -117,6 +117,20 @@ Amit a review néz: a fenti négy pont, a biztonsági invariánsok, és hogy a
 funkció valódi hiányt tölt-e be. Amit a Neptun natívan tud — naptár, tervező,
 szerveroldali szűrés —, azt nem építjük újra.
 
+## Amit nem építünk
+
+Az NPU azért van, hogy a hallgatóknak kevesebb stresszt okozzon a Neptun, nem
+azért, hogy az egyetemnek vagy a Neptun szervereinek ártson (lásd a README
+[Amiért csináljuk](../README.md#amiért-csináljuk) részét). Nem kerül be olyan
+modul, amely:
+
+- a felhasználó kattintása nélkül, időzítve vagy a háttérben küld kérést;
+- ismételgeti ugyanazt a kérést, vagy folyamatosan figyeli a férőhelyeket;
+- a kézi használatnál jobban terheli a szervert;
+- belépést, kétlépcsős azonosítást vagy CAPTCHA-t kerül meg.
+
+Ha nem biztos, hogy az ötleted belefér, nyiss előbb egy beszélgetést.
+
 ## Amit soha ne küldj be
 
 Jelszót, sütit, `Authorization` fejlécet, access tokent, teljes hálózati
