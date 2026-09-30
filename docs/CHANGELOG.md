@@ -2,6 +2,8 @@
 
 ## Következő kiadás
 
+## 3.2.0 — 2026. szept. 29. <a name="v3.2.0"></a>
+
 **Rajtoló**
 
 - Új, gyors, kattintásos felvétel: a Rajtoló ablakában tárgyanként egy

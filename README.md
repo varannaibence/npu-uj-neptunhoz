@@ -170,6 +170,54 @@ A legutóbbi három stabil kiadás. A **Telepítés** link Tampermonkey mellett
 közvetlenül telepíthető.
 
 <details open>
+<summary><strong>v3.2.0</strong> · 2026. szept. 29.</summary>
+
+**Rajtoló**
+
+- Megújult ablak: fent egy panel mondja meg, mikor nyit a tárgyfelvétel és hol
+  tart a Rajtoló, alatta a hiányzó feltételek (bejelentkezés, tárgyak, időpont,
+  lezárt időszak) – ugyanazok, amiket az Élesítés ellenőriz. Az időszak
+  kiválasztása magától kitölti a nyitás időpontját (a „Nyitás kitöltése” gomb
+  megszűnt), a kurzusoknál látszik az időpont és a férőhely, a stratégia
+  kapcsolói egy sorban választhatók. A gomb neve **Élesítés**, ha a nyitás
+  még előttünk van. Futás után a felső panel a legutóbbi futás összegzését
+  mutatja.
+- Az ablak és a README is jelzi, hogy a Rajtoló még nincs minden helyzetben
+  élesben letesztelve, ezért nyitáskor készülj a kézi felvételre. Ha a futás
+  ismeretlen hiba miatt áll le, az összegzés is ezt kéri.
+- Új **Kurzusválasztás** kapcsoló: szabad hely előnyben (végső esetben
+  várólista, ez az eddigi viselkedés), pontosan a megadott sorrend, vagy csak
+  szabad hely, várólistára soha. Mindhárom csak a bejelölt kurzusok közül
+  választ.
+- A tárgyak között nincs többé szünet: a következő tárgy azonnal megy, amint az
+  előző választ kapott. A „Késleltetés” mező megszűnt.
+- Gyorsabb nyitás: a kurzuslistákat 20 másodperccel a nyitás előtt előre
+  betölti, így nyitáskor tárgyanként csak a jelentkezés megy ki; az eredmény
+  ellenőrzése az összes beküldés után jön.
+- Ha a Neptun a nyitás pillanatában még zárva van („nincs tárgyjelentkezési
+  időszak”), a Rajtoló fél percig 0,3 másodpercenként újraküldi, ahelyett hogy
+  leállna.
+- Új figyelés: ha egy tárgy minden bejelölt kurzusa betelt, a Rajtoló a
+  választott ideig (5–60 perc) másodpercenként újraolvassa, és szabad helynél
+  azonnal jelentkezik.
+- Pontosabb indulás: a szerveróra-eltolást már csak a Neptun API-válaszaiból
+  számolja (egy gyorsítótárból érkező fájl régi dátuma eltolhatta a kezdést), a
+  legutóbbi mérések közül a legpontosabbat veszi (a Neptun csak egész
+  másodpercet küld), és ha a nyitás korábbra kerül, a visszaszámlálás maga
+  indítja a futást.
+
+**Egyéb**
+
+- Az Órarendjavaslatok akkor is működnek, ha a Férőhely és az Ütközés modul ki
+  van kapcsolva.
+- A „Vissza a legutóbbi oldalra” intézményenként jegyzi meg az oldalt.
+- Javítva: ha két mentés közvetlenül egymás után történt, a második változás
+  ritkán elveszhetett.
+
+[Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.2.0) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.2.0/npu.user.js)
+
+</details>
+<details>
 <summary><strong>v3.1.3</strong> · 2026. szept. 27.</summary>
 
 **Rajtoló**
@@ -221,44 +269,6 @@ közvetlenül telepíthető.
   beolvasztott PR-ek listája látszott.
 
 [Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.1.2) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.1.2/npu.user.js)
-
-</details>
-<details>
-<summary><strong>v3.1.1</strong> · 2026. szept. 27.</summary>
-
-**Órarendjavaslatok**
-
-- Javítva: ha egy tárgy egyik kurzusa (például az előadás) a Rajtolóban, a
-  másik (például a labor) csak a Neptun Tervezőjében szerepelt, a labor kimaradt
-  a számításból, így egy valódi ütközést is ütközésmentesnek mutatott.
-- Ha egy csoport nem fér be ütközés nélkül, a javaslat nem alkalmazható: a
-  kimaradó csoport kurzusa a Tervezőben maradna, és ütközhetne az újakkal. Az
-  előnézet és a részletek továbbra is látszanak.
-- Ritkábban jelzi tévesen, hogy „A Neptun nem adott friss munkamenetet”, ha a
-  gép órája kicsit eltér a szerverétől.
-
-**Rajtoló**
-
-- Élesített vagy futó Rajtolónál a „Rajtolóhoz” kapcsoló nem módosítja a
-  tervet, hanem szól, hogy előbb állítsd le. Eddig a kapcsoló látszólag
-  kivette vagy hozzáadta a kurzust, a futás mégis az indításkori tervet
-  küldte be.
-- Ha egy beküldés időtúllépéssel ér véget, a státusz azt mondja: „A szerver nem
-  válaszolt időben. A jelentkezés állapota bizonytalan.” – eddig csak általános
-  hibaüzenet jelent meg. A kérést továbbra sem küldi újra.
-- Javítva: token-frissítés után a sikertelenül betöltött kurzusadatok
-  újratöltése elmaradhatott, ha közben másik betöltés futott.
-
-**Egyéb**
-
-- Férőhely: ha két tárgynak azonos a kurzuskódja (például „01”), ezeknél a
-  soroknál nem jelenik meg létszám, és a „Betelt kurzusok hátra” rendezés sem
-  mozgatja őket. Eddig az egyik tárgy kurzusa a másik tárgy létszámát és betelt
-  állapotát mutathatta.
-- Mi van ma?: a határidő nélküli befizetendő tétel is megjelenik („határidő
-  nélkül”); eddig kimaradt, és a kártya azt írhatta, hogy nincs befizetendő tétel.
-
-[Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.1.1) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.1.1/npu.user.js)
 
 </details>
 

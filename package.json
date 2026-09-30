@@ -1,6 +1,6 @@
 {
   "name": "npu",
-  "version": "3.1.3",
+  "version": "3.2.0",
   "description": "Felturbózza a Neptun-odat",
   "main": "dist/npu.user.js",
   "scripts": {
