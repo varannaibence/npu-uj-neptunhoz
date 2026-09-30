@@ -190,6 +190,15 @@ A legutóbbi három stabil kiadás. A **Telepítés** link Tampermonkey mellett
 közvetlenül telepíthető.
 
 <details open>
+<summary><strong>v3.3.1</strong> · 2026. szept. 30.</summary>
+
+- Új logó: dőlt N, a jobb szára felfelé mutató nyíl, a bal szára villám. Ez
+  jelöli az NPU gombjait a Neptunban, és ez látszik a Tampermonkeyben is.
+
+[Release megnyitása](https://github.com/varannaibence/npu-uj-neptunhoz/releases/tag/v3.3.1) · [Telepítés](https://github.com/varannaibence/npu-uj-neptunhoz/releases/download/v3.3.1/npu.user.js)
+
+</details>
+<details>
 <summary><strong>v3.3.0</strong> · 2026. szept. 30.</summary>
 
 **Rajtoló**
