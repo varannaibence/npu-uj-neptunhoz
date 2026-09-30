@@ -4,9 +4,12 @@ const interceptor = require("./interceptor");
 const router = require("./router");
 const settings = require("./settings");
 const settingsPanel = require("./settingsPanel");
+const devlog = require("./devlog");
 
-// Feature modules, each exporting { shouldActivate, initialize }
+// Feature modules, each exporting { shouldActivate, initialize }. The developer module
+// comes first, so its log sees the others start.
 const modules = [
+  require("./modules/devTools"),
   require("./modules/paginationFixes"),
   require("./modules/loginBanner"),
   require("./modules/courseAutoList"),
@@ -73,9 +76,15 @@ const enabledFlags = settings.readFlags();
 // Before first paint, so Neptun's blue never flashes.
 require("./theme").apply(settings.themeColor(enabledFlags));
 
+// One module throwing must not keep the ones after it from starting.
 modules.forEach(module => {
-  if (settings.isEnabled(module, enabledFlags) && module.shouldActivate()) {
-    module.initialize();
+  try {
+    if (settings.isEnabled(module, enabledFlags) && module.shouldActivate()) {
+      module.initialize();
+      devlog.log("module", `${module.meta.id} elindult`);
+    }
+  } catch (e) {
+    devlog.error(`modul ${module.meta && module.meta.id}`, e);
   }
 });
 

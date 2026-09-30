@@ -38,8 +38,8 @@ hogy a választest érdektelen. A `request.*` és `sortAndPage.*` query-paramét
 ASP.NET Core model bindinget követnek. A tárgylista kérésének
 `request.termId` értéke a mért numerikus kérés-ID (`<numeric-term-id>`). Ettől
 külön namespace a válaszsorok saját `termId` mezője, amely GUID-formájú lehet;
-a Rajtoló `SubjectSignin` kérése ezt a válaszból származó GUID-ot használja. A
-két értéket nem szabad felcserélni.
+a `SubjectSignin` kérés és a natív „Tárgy felvétele” gomb azonosítója ezt a
+válaszból származó GUID-ot használja. A két értéket nem szabad felcserélni.
 
 Az Angular a saját XHR-kéréseihez `Authorization` fejlécet és munkamenet-sütit
 használ. A katalógus nem tartalmaz valódi fejlécet, sütit vagy tokent. Az NPU a
@@ -146,7 +146,7 @@ sokkal bővebb; az alábbiak eddig kihasználatlanok voltak:
 | Mező                                                                                 | Mit ad                                                                | Állapot                        |
 | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------- | ------------------------------ |
 | `isSigned`                                                                           | **igaz pontosan azokra a kurzusokra, amelyeket a hallgató felvett**   | használjuk (ütközés-alapvonal) |
-| `isOnWaitingList`                                                                    | a hallgató várólistán van-e ezen a kurzuson                           | használjuk (Rajtoló-eredmény)  |
+| `isOnWaitingList`                                                                    | a hallgató várólistán van-e ezen a kurzuson                           | használjuk (Rajtoló: kihagyás) |
 | `comparationTypeId`                                                                  | a kurzustípus GUID-ja (Labor és Elmélet külön érték)                  | használjuk (csoportkulcs)      |
 | `room`                                                                               | kurzusszintű terem, a `classInstanceInfos[].rooms` mellett            | használjuk                     |
 | `note`                                                                               | „Megjegyzés”; üres órarendnél ebből olvassuk ki a napot, időt, termet | használjuk (órarend-tartalék)  |
@@ -176,7 +176,10 @@ látható és javítható, egy elmaradt nem.
 
 ### `POST SubjectApplication/SubjectSignin` — [Mért kérés, részben ismeretlen válasz]
 
-**Használat:** a Rajtoló által küldött, soros tárgyjelentkezés.
+**Használat:** a Rajtoló **Felvétel** kattintása, tárgyanként egyet, egy friss
+`GetSubjectsCourses` után, ugyanazzal a törzzsel, mint a Neptun „Tárgy felvétele”
+gombja. Ha a beküldött kurzus közben betelt, a következő rangsorolt kurzussal
+küldi újra, kattintásonként legfeljebb négyszer, ugyanazt a kurzust soha kétszer.
 
 ```http
 POST /hallgato_ng/api/SubjectApplication/SubjectSignin
@@ -205,19 +208,29 @@ Mért, zárt időszak alatti hiba:
 
 A sikeres választest és a valóban betelt, nem várólistás elutasítás teljes
 formája `[Ismeretlen]`, mert ezeket csak éles tárgyfelvételi időszakban lehet
-felelősen mérni. A Rajtoló ismeretlen vagy időtúllépéses válasznál megáll, nem
-könyvel találgatott sikert, és a már elküldött kérést nem próbálja visszavonni.
+felelősen mérni. Hogy a Neptun saját kliense milyen sikeres választ vár, azt a
+[bundle-ből kiolvasott rész](#api-bundle) írja le; ez sem mérés.
 
-`401` (lejárt token) esetén a Rajtoló friss tokent kér a Neptuntól, és a kérést
-**egyszer** újraküldi, hacsak közben le nem állították. Hogy egy 401-es
-`SubjectSignin` semmit sem dolgozott fel, az **következtetés, nem mérés**: a
-JWT-ellenőrzés az action előtt fut, és a Tervező-hívásoknál mértük, hogy a
-Neptun maga is újraküldi a 401-es kérést. Élő tárgyfelvételi időszakban mérendő.
+A 3.2.0-ig a Rajtoló maga küldte ezt a kérést, és a „nincs
+tárgyjelentkezési időszak” válaszra a nyitás után fél percig 300 ms-onként
+újraküldte. Ezt kivettük: az ilyen scriptek terhelik a szervert, és volt már
+miattuk fegyelmi eljárás.
 
-A fenti, mért „nincs tárgyjelentkezési időszak” választ a Rajtoló a futás első
-30 másodpercében 300 ms-onként, egyesével újraküldi: ez a válasz semmit nem
-dolgozott fel, így egy kicsit később nyitó intézménynél a beküldés a nyitás
-pillanatában ér be. A 30 másodperc után ugyanez a válasz leállítja a futást.
+A Rajtoló a választ így olvassa (`signinOutcome`): HTTP-státusszal érkező
+`type: 3` értesítés → elutasítás a Neptun szövegével; státusz nélküli hiba (a
+saját időtúllépésünk vagy hálózati hiba) → bizonytalan; 2xx, üres
+`notification[]` és `data.isWaiting: true` → várólista; minden kiválasztott
+kurzus `data.signedCourses[<id>].isSigned: true` → felvéve; minden más →
+bizonytalan. Elutasítás vagy bizonytalan válasz után egyszer újraolvassa a
+kurzuslistát: ha a mért `isSigned`/`isOnWaitingList` mezők szerint felvette, azt
+írja ki. A következő kurzust csak akkor próbálja, ha a válasz elutasítás, és a
+friss lista a beküldött kurzust `isFull: true`-nak mutatja; a betelt elutasítás
+szövegére, amíg nem mértük, nem épít. Időtúllépés után soha nem küld újra.
+
+Lejárt tokennél a kérés előtt a Neptun „Tárgy keresése” gombját nyomja meg (a
+Neptun így maga frissít), `401`-re egy frissítés után egyszer újraküldi, ahogy
+a Neptun kliense is teszi minden kérésével (a Tervező-hívásoknál mérve). A saját
+kérések a Neptun kliensének `Accept` fejlécével mennek.
 
 ### `GET SubjectApplication/ScheduledSubjectsWithScheduledCourses` — [Mért]
 
@@ -327,9 +340,8 @@ POST /hallgato_ng/api/SubjectApplication/UnScheduleCourse
 
 ### `GET Periods/GetPeriods` — [Mért kérés és időpontmezők]
 
-**Használat:** a Rajtoló időszakválasztója. Az endpointot a tárgyfelvételi
-oldal nem minden esetben kéri magától; a Rajtoló a tervező megnyitásakor, aktív
-sessionnel kéri le.
+**Használat:** az NPU jelenleg nem kéri. A Rajtoló időszakválasztója és
+emlékeztetője megszűnt; a mérés referenciaként maradt itt.
 
 ```http
 GET /hallgato_ng/api/Periods/GetPeriods?
@@ -348,8 +360,7 @@ GET /hallgato_ng/api/Periods/GetPeriods?
 }
 ```
 
-A dátum a mért példányban helyi falióraidő, timezone-suffix nélkül. A Rajtoló
-nem a `periodName` alapján választ automatikusan; a felhasználó választ a listából.
+A dátum a mért példányban helyi falióraidő, timezone-suffix nélkül.
 
 ## Hitelesítés és munkamenet
 
@@ -458,8 +469,8 @@ A mért válaszban `accessToken` és `sessionTimeoutInMinutes` szerepel. A token
   Mért kiváltó a Neptun saját API-kérése, például a „Tárgy keresése” gombé.
 
 Az NPU nem küld saját `GetNewTokens`-t. A tárgyfelvételi oldalon a Neptun saját
-„Tárgy keresése” gombját nyomja meg, és így a Neptun maga frissít. Az élesített
-Rajtoló akkor, ha a token 10 percnél régebben készült. A bekapcsolt
+„Tárgy keresése” gombját nyomja meg, és így a Neptun maga frissít. Az
+Órarendjavaslatok a Tervező írása előtt, lejárt tokennél. A bekapcsolt
 `infiniteSession` akkor, ha az oldal 12,5 perce nem küldött saját API-kérést,
 vagy ha a legutóbbi tokenfrissítés 10 percnél régebbi és a token lejárt: a
 munkamenet-süti a frissítéstől számít 15 percet, ami a legutóbbi kérésnél
@@ -703,6 +714,125 @@ válasza a mért mintában ilyen tárgyak órarendjét is elérhetővé tette az
 A `RegisteredCourses/GetRegisteredCourses` endpoint továbbra is létezik az API-ban,
 de a tárgyfelvételi oldal nem indítja. A v3 a mért `GetScheduledCourses` választ
 használja a felvett kurzusok szűrésére.
+
+<a id="api-bundle"></a>
+
+## A natív kliens elvárásai — [Bundle-ből, nem mért]
+
+Forrás: a publikus Angular bundle (`main-*.js` és a belőle betöltött `chunk-*.js`
+fájlok), valamint a szintén belépés nélkül elérhető `GET Translations?lcid=1038`
+UI-szótár (unideb, 2026-09-29). Mindkettőt a login oldal is betölti; token nem
+kellett hozzájuk.
+
+Ez azt rögzíti, **amit a Neptun saját kliense a választól vár**, nem a szerver
+mért válaszát. A kód nem építhet rá állítást a szerverről. A mérési kapukat a
+Fejlesztői mód Mérőmódja által gyűjtött minta zárhatja be (beküldése:
+[TESTED.md](TESTED.md#mérőmód-minta-a-még-nem-mért-válaszokról)).
+
+### Tárgyfelvételi hívások
+
+| Hívás                                                       | Kérés (a kliens kódjából)                                                   | Amit a kliens a válaszból olvas                                                                                  |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `POST SubjectApplication/SubjectSignin`                     | [mért](#api-subjectsignin)                                                  | a teljes burok: `data.indexLineId`, `data.isWaiting`, `data.signedCourses` (kurzusazonosító → kurzussor), `notification` |
+| `POST SubjectApplication/SubjectSignout`                    | `{ "indexLineId": "<index-line-id>" }`                                      | `data.isCompleted`, `data.isRetakeableCompletedSubject`, `data.unsignedCourses` (kurzusazonosító → kurzussor)   |
+| `POST SubjectApplication/CourseChange`                      | `{ "indexLineId": "<index-line-id>", "requestedCourseId": "<course-guid>" }` | `data`; a Felvett tárgyak oldal kurzuscsere-ablaka hívja                                                         |
+| `POST SubjectApplication/DeleteAllScheduledScheduledSubjects` | `{ "termId": "<term-id>" }` (hogy GUID vagy numerikus, nem ismert)          | `data`                                                                                                           |
+| `GET SubjectApplication/SystemParameters`                   | paraméter nélkül; a tárgyfelvételi oldal minden betöltéskor kéri            | `data.freeSignin`, `data.retakeableCompletedSubject`                                                             |
+
+A kliens a `SubjectSignin` válaszát így dolgozza fel:
+
+```json
+{
+  "data": {
+    "indexLineId": "<index-line-id>",
+    "isWaiting": false,
+    "signedCourses": {
+      "<course-guid>": { "isSigned": true, "registeredStudentsCount": 0, "waitingStudentsCount": 0 }
+    }
+  },
+  "notification": []
+}
+```
+
+- Minden nem hibás (2xx) választ felvételnek vesz: a tárgyat `isRegistered: true`
+  és `isWaiting: data.isWaiting` állapotba teszi. A „Sikeres tárgyfelvétel!”
+  szöveget a saját szótárából veszi, és csak akkor mutatja, ha a `notification[]`
+  üres. A nem 2xx válasz a globális hibakezelőhöz megy.
+- Írás után a kurzus `isFull` értékét maga számolja:
+  `registeredStudentsCount + waitingStudentsCount >= maxLimit + maxWaitingStrength`.
+  Ez a kliens képlete. Az NPU továbbra is a szerver `isFull` és
+  `willBeOnWaitingList` mezőjét olvassa, férőhely-aritmetikát nem végez.
+- Nyitott kérdés: a natív kliens a 2xx + `data` + nem üres, hibát nem jelző
+  (`type` ≠ 3) `notification[]` választ is felvételnek tekinti. Hogy ilyen válasz
+  élesben előfordul-e (például várólistás felvételnél), első mért mintáig nem
+  tudjuk.
+
+### Kurzusválasztás és a „Tárgy felvétele” gomb
+
+A Neptun saját felülete így működik (unideb-bundle, 2026-09-30). A Rajtoló ezt
+nem vezérli; a kéréseket maga küldi, ugyanazzal a törzzsel.
+
+- A tárgysor (`neptun-subject-list-item`) egy `mat-expansion-panel`. A
+  fejlécére (`mat-expansion-panel-header`, `aria-expanded`) kattintva nyílik le,
+  és a lenyitás (`opened`) indítja a Neptun `GetSubjectsCourses` kérését. A
+  kurzuslista, a „Tárgy felvétele” és a „Részletek” gomb
+  (`<a négy azonosító>details-btn`) csak a válasz után jelenik meg.
+- A kurzussor jelölőnégyzete (`neptun-course-list-item` → `mat-checkbox`,
+  benne `input.mdc-checkbox__native-control`) csak a kliens állapotát állítja:
+  a `selectCourse` effekt kérés nélkül a kurzus `isSelected` mezőjét írja, és
+  **kurzustípusonként egyet** hagy kijelölve (a `type` szerint; egy másik
+  bejelölése az azonos típusú korábbit kiveszi).
+- A natív felvétel a kijelölt kurzusokat küldi:
+  `courseIds = courses.filter(isSelected).map(id)`.
+- Első betöltéskor a kliens magától kijelöli a felvett kurzust és
+  típusonként az első Tervezőbe tett kurzust (`isSelected: isSigned ||
+  első ütemezett`).
+- A jelölőnégyzet tiltott, ha a kurzus `isFull` és nem rangsoros, ha a tárgyból
+  már van felvett kurzus ugyanabból a típusból, vagy ha betöltés folyik. Felvett
+  vagy várólistás kurzusnál nincs jelölőnégyzet.
+- A „Tárgy felvétele” gomb (`subjects.registerSubject`) azonosítója
+  `<subject-guid><curriculum-template-guid><curriculum-template-line-guid><term-guid>register-btn`,
+  és csak akkor jelenik meg, ha a tárgy nincs felvéve, és a kliens engedi a
+  felvételt (`!isRegistered && canRegister`). A gomb a
+  `neptun-subject-list-item` elemen belül van, a kurzuslistával együtt.
+- A `mat-checkbox` a natív inputon kapott kattintást ugyanúgy kezeli, mint az
+  egérkattintást: tiltott állapotban nem vált, egyébként vált és jelez a
+  `change` eseménnyel.
+- A gombnyomás után a kliens megerősítő ablakot nyit
+  (`neptun-registration-confirmation-dialog`), hacsak a hallgató korábban nem
+  kérte, hogy ne jelenjen meg. Az ablak csak a kliensen él: a Megerősítés
+  (`.dialog__buttons button.responsive`) után indul a `SubjectSignin`, a Mégse
+  után semmi. A „Ne jelenjen meg többet” (`#registration-confirmation`)
+  bepipálása menti a beállítást.
+- A felvételt a kliens `switchMap`-pel indítja: egy újabb gombnyomás a
+  folyamatban lévőt a kliensen megszakítja. A Rajtoló is egyszerre csak egy
+  tárgyat visz, a következőt csak a válasz után engedi.
+
+### Háttérben futó felvétel
+
+- A natív tervezőlista az `isInProgress: true` tárgyakat külön, „felvétel
+  folyamatban” csoportba teszi. A mező a `SchedulableSubjects` soraiban mérten
+  `false` volt.
+- A szótár szövege (`subjects.subjectApplicationInProgressError`): „Nem
+  kezdeményezhető párhuzamosan több tárgy felvétele. Amíg a háttérben az egyik
+  tárgy felvételének folyamata nem zárult le, addig várni kell az újabb tárgy
+  felvételével.” A natív felvétel előtt megerősítő ablak jön („Egyszerre csak egy
+  tárgyfelvételi folyamat indítható el…”); elrejtését a
+  `POST ContextUserProfile/SaveSubjectSigninWarningModalsStates` menti.
+- Következtetés, nem mérés: egyes beállításoknál a szerver sorba állíthatja a
+  felvételt.
+
+### Amit a bundle nem ad
+
+A szerver üzleti szövegei (`notification[].description`) sem a bundle-ben, sem a
+szótárban nincsenek benne; a mért „Jelenleg nincs tárgyjelentkezési időszak!”
+sem. A sikeres válasz tényleges törzse és a valóban betelt kurzus elutasítása
+ezért innen nem ismerhető meg, csak éles mérésből.
+
+Új Neptun-verziónál így nyerhető ki újra: a `main-*.js`-től indulva le kell tölteni
+az összes hivatkozott `chunk-*.js` fájlt, és ki kell keresni a
+`` httpClient.<metódus>(`${…apiServer.url}<Controller>/<Action>` `` mintákat. A
+2026-09-29-i unideb-bundle 452 ilyen hívást tartalmaz.
 
 ## Kapcsolódó dokumentumok
 

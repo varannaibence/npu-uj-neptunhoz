@@ -19,22 +19,27 @@ _Az egyetem már így is elég nehéz. Ne a Neptun tegye nehezebbé._
 
 ---
 
-A **Neptun PowerUp!** (NPU) egy böngészőben futó userscript, amely a Neptun
-hallgatói felületét egészíti ki: kiírja a kurzusok férőhelyét és órarendi
-ütközéseit, sorba rendezett tárgyfelvételt tesz lehetővé, és a felületet a
-saját ízlésedre színezheted. Mindez helyben, a böngésződben fut — saját szerver,
-fiók vagy jelszómentés nélkül.
+Mi is Neptunon veszünk fel tárgyakat. Ismerjük a nyitás előtti frissítgetést,
+a betelt kurzust, amiről csak a harmadik kattintás után derül ki, hogy betelt,
+és az órarendet, ami papíron jó volt, aztán mégis ütközött. A **Neptun
+PowerUp!** (NPU) ezért készült.
 
-A 3.x sorozat az **új Neptun NG felülethez** készült, a nulláról újraírva. A
-régi felülethez tartozó 2.4.1-es kiadás az [eredeti
-projektben](https://github.com/solymosi/npu) érhető el; az új Neptunon nem
+Az NPU egy userscript, vagyis egy kis program a böngésződben, ami a Neptun
+hallgatói felületét egészíti ki. Kiírja a kurzusok férőhelyét és az órarendi
+ütközéseket, mentett kurzussorrenddel segíti a kézi tárgyfelvételt, és a felületet a saját
+ízlésedre színezheted. Minden helyben, a böngésződben fut: nincs saját
+szerverünk, nem kell fiók, és a jelszavadat nem tároljuk.
+
+A 3.x sorozatot az **új Neptun NG felülethez** írtuk, a nulláról. A régi
+felülethez tartozó 2.4.1-es kiadás az [eredeti
+projektben](https://github.com/solymosi/npu) érhető el, de az új Neptunon nem
 működik.
 
 > **Korai fejlesztési fázis.** A működés és a felület még változhat. Hogy melyik
 > intézményen mit ellenőriztünk, azt a [docs/TESTED.md](docs/TESTED.md) mutatja.
 
 <p align="center">
-  <img src="docs/assets/screenshots/rajtolo.webp" width="760" alt="A Rajtoló ablaka: felül a nyitás időpontja és a hátralévő idő, alatta az élesítés feltételei, a tárgyak és kurzusok sorrendje férőhely-jelöléssel, és a stratégia beállításai.">
+  <img src="docs/assets/screenshots/rajtolo.webp" width="760" alt="A Rajtoló ablaka: a tárgyak a kattintás sorrendjében, mindegyiknél a kurzusok sorrendje férőhely-jelöléssel és egy Felvétel gomb, alatta a Kurzusválasztás és a kredit-előrejelzés.">
   <br><sub>A Rajtoló ablaka, példaadatokkal.</sub>
 </p>
 
@@ -79,7 +84,7 @@ leírás](docs/DEVELOPMENT.md) sorolja fel.
 
 | Funkció | Leírás | Hol található | Alapállapot |
 | --- | --- | --- | :---: |
-| Sorba rendezett tárgyfelvétel | Mentett tárgy- és kurzussorrend, a megadott időpontban soros beküldéssel. Még nincs minden helyzetben élesben letesztelve, ezért nyitáskor készülj a kézi felvételre is. [Részletek](#a-rajtoló) | Tárgyak › Tárgyfelvétel: **Rajtoló** gomb a szűrők mellett, **Rajtolóhoz** kapcsoló a kurzusoknál | Külön indítható |
+| Sorba rendezett tárgyfelvétel | Mentett kurzussorrend tartalékkurzusokkal. Az ablakában egy kattintás egy tárgy: friss kurzuslista, és felvétel a sorrended szerinti szabad kurzusokkal; ha egy kurzus közben betelt, a következővel próbálja. Magától semmit nem küld el. [Részletek](#a-rajtoló) | Tárgyak › Tárgyfelvétel: **Rajtoló** gomb a szűrők mellett, **Rajtolóhoz** kapcsoló a kurzusoknál | Be |
 | ↳ Órarendjavaslatok | **Javaslatok** gomb a Neptun Órarendtervezőjében: a felvett órák mellé ütközésmentes kurzusválasztást keres (kevesebb lyukas óra, több szabad nap vagy legkevesebb csere), a heti rácson előnézetben mutatja; megerősítés után a Neptun Tervezőjében is a javasolt kurzusokra cseréli a tervezetteket, és átrendezi a Rajtoló sorrendjét. | Tárgyak › Tárgyfelvétel: a lap alján nyíló Órarendtervező fejléce | Be |
 
 ### Mindennapok
@@ -102,6 +107,13 @@ leírás](docs/DEVELOPMENT.md) sorolja fel.
 | Munkamenet életben tartása | A tárgyfelvételi oldalon tétlen fülnél is megakadályozza a kiléptetést: mielőtt a munkamenet lejárna (12,5 perc tétlenség, vagy 10 perce nem frissült token után), megnyomja a Neptun saját keresőgombját. | Tárgyak › Tárgyfelvétel, a háttérben | Ki |
 | Verzió és hibabejelentés | Az NPU neve és verziója a bejelentkező oldalon és a láblécben, hibabejelentő linkkel. | Bejelentkező oldal és lábléc | Be |
 | Frissítés jelzése | Amikor a Tampermonkey frissíti az NPU-t, a következő betöltéskor egyszer jelzi az új verziót, a változásnapló linkjével. | Frissítés utáni első betöltéskor | Be |
+
+### Fejlesztői eszközök
+
+| Funkció | Leírás | Hol található | Alapállapot |
+| --- | --- | --- | :---: |
+| Fejlesztői mód | Napló arról, mit lát és mit tesz az NPU: API-hívások metódussal, státusszal és időtartammal, munkamenet-váltások, útvonalak, szerveróra-eltérés, a Rajtoló lépései és az egyébként elnyelt hibák, plusz egy állapotlap (token lejárta, szerveróra, bekapcsolt modulok). Csak memóriában tartja, maszkolva; egy gombbal beküldhető: a vágólapra másolja, és megnyitja a GitHub „Mérés” űrlapját. | Tampermonkey menü › **NPU fejlesztői eszközök** | Ki |
+| ↳ Mérőmód | Maszkolva elmenti a Neptun még nem mért tárgyfelvételi válaszait (pl. sikeres jelentkezés, betelt kurzus elutasítása), hogy elküldhesd a fejlesztőknek. [Hogyan?](docs/TESTED.md#mérőmód-minta-a-még-nem-mért-válaszokról) | Tárgyak › Tárgyfelvétel, a háttérben | Be |
 
 ## Telepítés
 
@@ -265,60 +277,66 @@ közvetlenül telepíthető.
 
 ## A Rajtoló
 
-A Rajtoló előre összeállított tervvel, a tárgyfelvétel nyitásakor, a megadott
-sorrendben küldi be a jelentkezéseket.
+A Rajtolóban előre összeállítod, melyik kurzusra mennél, és ha az betelt,
+melyik jöhet helyette. Nyitáskor a Rajtoló ablakában csak végigkattintasz a
+tárgyaidon: minden kattintás egy tárgyat vesz fel. Ez gyorsabb a kézi
+felvételnél, mert nem kell tárgyanként keresgélned, lenyitnod és pipálnod.
 
-> [!WARNING]
-> **A Rajtoló még nincs minden helyzetben élesben letesztelve.** A sikeres
-> jelentkezés, a valóban betelt kurzus és a rangsoros kurzus szerverválaszát
-> csak éles tárgyfelvételen lehet lemérni, és ez még hátravan. Nyitáskor legyél
-> a gépnél, legyen kéznél a kurzusaid listája a kódokkal, és ha a Rajtoló megáll,
-> hibát jelez vagy nem történik semmi, vedd fel a tárgyakat azonnal kézzel. Az
-> eredményt mindig ellenőrizd a Neptunban.
-
-1. Jelentkezz be, és maradj bejelentkezve a tervezett kezdésig.
-2. A **Tárgyfelvétel** oldalon listázd a tárgyakat, és a kívánt kurzusoknál
-   kapcsold be a **Rajtolóhoz** kapcsolót.
-3. Nyisd meg a Rajtolót a szűrő melletti gombbal. Fent mindig látod, mikor nyit
-   a tárgyfelvétel, és mi hiányzik még az élesítéshez. Válaszd ki az időszakot a
-   Neptun saját tárgyfelvételi időszakai közül: a nyitás időpontja magától
-   kitöltődik, de kézzel is átírhatod. Rendezd sorba a tárgyakat és a
-   kurzusokat (a kurzusoknál látod az időpontot és azt, hogy van-e még hely), és
-   nézd át az ütközéseket és a kredit-előrejelzést. A
-   **Kurzusválasztás** sorban döntsd el, hogyan válasszon a sorrendedből:
-   szabad hely előnyben (végső esetben várólista), pontosan a megadott sorrend,
-   vagy csak szabad hely, várólistára soha. A Rajtoló csak a bejelölt
-   kurzusaid közül választ. Azt is beállíthatod, hogy ha egy tárgy minden
-   bejelölt kurzusa betelt, a Rajtoló 5–60 percig figyelje: másodpercenként
-   újraolvassa, és ha hely szabadul fel, azonnal jelentkezik.
-4. Nyomd meg az **Élesítés** gombot (ha a nyitás már elmúlt, **Indítás**), és
-   kövesd az eredményeket. A kurzuslistákat a nyitás előtt
-   20 másodperccel előre betölti, így nyitáskor a tárgyakat egymás után, szünet
-   nélkül, azonnal küldi be. Ha a Neptun a nyitás pillanatában még zárva van, fél
-   percig háromtized másodpercenként újrapróbálja. Az összes beküldés után a
-   Rajtoló tárgyanként egyszer újra lekéri a kurzuslistát: ha a Neptun szerint minden beküldött
-   kurzusod felvett, **Felvéve**, ha valamelyiken várólistán vagy, **Várólistára
-   került** jelzést kapsz. Ha ez nem dönthető el, **Beküldve** marad, és a
-   Neptunban kell ellenőrizned.
+1. A **Tárgyfelvétel** oldalon a kívánt kurzusoknál kapcsold be a
+   **Rajtolóhoz** kapcsolót. Egy kurzustípuson belül (például a laborok
+   között) a bekapcsolás sorrendje a rangsor.
+2. Nyisd meg a Rajtolót a szűrők mellett. A tárgyak abban a sorrendben állnak,
+   ahogy kattintani fogod őket; tárgyanként a **Sorrend szerkesztése** alatt
+   átrendezheted őket és a kurzusokat. Alul eldöntheted, mi legyen, ha az első
+   választásod betelt: szabad hely előnyben, pontos sorrend, vagy várólista
+   nélkül.
+3. Nyitáskor kattints a tárgy **Felvétel** gombjára. A Rajtoló friss
+   kurzuslistát kér, kurzustípusonként a sorrendedben első szabad kurzussal
+   felveszi a tárgyat, és kiírja a Neptun válaszát. Utána a következő tárgy
+   gombja kap fókuszt, így Enterrel is mehetsz tovább.
 
 <p align="center">
-  <img src="docs/assets/screenshots/rajtolo-eredmeny.webp" width="680" alt="A Rajtoló egy futás után: felül az összegzés (3 tárgyból 2 felvéve, 1 várólistán), a tárgyaknál a Neptun kurzuslistája szerinti eredmény.">
-  <br><sub>Futás után az eredmény, példaadatokkal.</sub>
+  <img src="docs/assets/screenshots/rajtolo-eredmeny.webp" width="680" alt="A Rajtoló végigkattintás után: két tárgy felvéve, egy várólistán, tárgyanként a Neptun válasza és a felvett kurzusok kódja.">
+  <br><sub>Végigkattintás után, példaadatokkal.</sub>
 </p>
 
-Az időpontok magyar idő szerint értendők akkor is, ha a gépedet más időzónára
-állítottad (például külföldi részképzésen).
+Ha a beküldött kurzus közben betelt, ugyanazon a kattintáson belül a
+sorrendedben következővel próbálja, kattintásonként legfeljebb négyszer, és
+ugyanazt a kurzust soha nem küldi el kétszer. Minden más elutasításnál (például
+nincs nyitva a tárgyfelvétel, vagy nem teljesül egy előfeltétel) megáll, és
+kiírja a Neptun üzenetét. Ha a szerver nem válaszol időben, nem küldi újra,
+mert a kérés attól még célba érhetett: egyszer megnézi, felvett-e, és ezt írja
+ki. Egyszerre egy tárgy megy. Ha a tárgyból már van felvett vagy várólistás
+kurzusod, semmit nem küld.
 
-Elindítás után a Rajtoló életben tartja a munkamenetet, amíg az ablaka nyitva
-van. Ehhez nem küld saját frissítő kérést: kb. 10 percenként megnyomja a Neptun
-saját **Tárgy keresése** gombját, a Neptun pedig maga frissít. A nyitás előtti
-másfél percben ugyanígy friss tokent kér, hogy az első jelentkezés ne akadjon
-el. Ha a Neptun nem ad új munkamenetet, a visszaszámlálás mellett figyelmeztetés
-jelenik meg. A hátralévő idő a böngészőfül címében is látszik, a futás végén
-pedig a háttérben lévő fül címe **✔ Rajtoló kész** lesz.
+A felvételt a Rajtoló ugyanazzal a két kéréssel végzi, amit a Neptun is küld,
+ha kézzel veszed fel a tárgyat. A Neptun tárgylistája az eredményt a **Tárgy
+keresése** után mutatja. Ha a belépési token közben lejárt, a Rajtoló előbb a
+Neptun saját **Tárgy keresése** gombjával frissíttet, ettől a lista is
+újratöltődik.
 
-A terv felhasználónként és félévenként a böngésződben tárolódik. A Neptun
-**Tervezőhöz adás** kapcsolója ettől független funkció.
+> A Rajtolót még nem próbáltuk ki éles tárgyfelvételen. Az eredményt mindig
+> nézd meg a Neptunban is.
+
+<details>
+<summary><strong>Miért nem jelentkezik helyetted magától?</strong></summary>
+
+Utánanéztünk: az időzítve vagy újra és újra beküldő scriptek terhelik a Neptun
+szerverét, előnyt adnak a többiekkel szemben, és volt már rá példa, hogy egyetem
+fegyelmi eljárást indított miattuk. Ezért a Rajtoló csak azt teszi, amit te is
+megtennél, csak gyorsabban: egy kattintásra egy tárgyat vesz fel, ugyanazokkal a
+kérésekkel, amiket a Neptun is küld. Nincs időzítés, ismételgetés vagy háttérben
+figyelés, így a szervert sem terheli jobban, mint a kézi felvétel. Reméljük, így
+senki nem kerül bajba.
+
+Az intézményed szabályzata ettől még tilthatja az ilyen kiegészítőket: nézd meg,
+mielőtt használod. Részletek: [Felelősség és használat](docs/FELELOSSEG.md).
+
+</details>
+
+A terv felhasználónként és félévenként a böngésződben tárolódik, a kurzusok
+kódjával és időpontjával együtt. A Neptun **Tervezőhöz adás** kapcsolója ettől
+független funkció.
 
 Az Órarendtervező **Javaslatok** gombja a Rajtolóban és a Neptun Tervezőjében
 kiválasztott kurzuscsoportokhoz keres ütközésmentes kombinációt a már felvett
@@ -335,26 +353,22 @@ cserét magát a Neptunban végezheted el. „Nincs ismert ütközés” azt jel
 az ismert időpontok között nincs átfedés: az időpont nélküli kurzusokra külön
 figyelmeztet.
 
-> **Fontos:** a Rajtoló **nem** jelentkezik be helyetted, nem kér kétlépcsős kódot, nem
-> kerüli meg a CAPTCHA-t és nem hágja át az egyetem szabályait. A
-> **Leállítás** csak a további kéréseket állítja meg — ami már elment, azt nem
-> lehet visszavonni. A várólistára kerülést a sikeres felvételtől külön jelzi,
-> ismeretlen szerverválasznál pedig megáll, és nem könyvel el sikert.
+> A Rajtoló nem jelentkezik be helyetted, nem tárol jelszót és nem kezel
+> kétlépcsős kódot.
 
 ## Fontos korlátok
 
 - **Intézményi lefedettség.** Az ellenőrzött állapot a
   [docs/TESTED.md](docs/TESTED.md) lapon látható; ami nincs benne, arról nincs
   mérésünk.
-- **A döntést a Neptun hozza.** Éles tárgyfelvételi időszakban még ellenőrizendő
-  a sikeres beküldés, a ténylegesen betelt (nem várólistás) kurzus és a
-  rangsoros kurzusok szerverválasza. Addig a Rajtoló mellett készülj a kézi
-  felvételre is: ha megáll vagy hibát jelez, vedd fel a tárgyakat kézzel.
-- **Tétlen munkamenet.** A magára hagyott fül munkamenete alapból lejár. Az
-  elindított Rajtoló a visszaszámlálás alatt, a bekapcsolt **Munkamenet
-  életben tartása** pedig mindig életben tartja, de csak a tárgyfelvételi
-  oldalon. Mindkettő a Neptun saját keresőgombját nyomja meg. Más oldalon az NPU
-  nem tudja megakadályozni a kiléptetést.
+- **A döntést a Neptun hozza.** Hogy a felvétel sikerült-e, azt a Neptun
+  válasza mondja meg. A sikeres felvétel és a betelt kurzus elutasításának
+  pontos válaszát még nem mértük éles tárgyfelvételi időszakban; a Rajtoló ezért
+  a betelt állapotot a friss kurzuslistából dönti el, nem az üzenet szövegéből.
+- **Tétlen munkamenet.** A magára hagyott fül munkamenete lejárhat.
+  A Rajtoló nem tartja életben. A külön bekapcsolható
+  **Munkamenet életben tartása** funkció a tárgyfelvételi oldalon a Neptun
+  saját keresőgombját használja.
 - **Ütközésjelzés.** Csak azokkal a kurzusokkal számol, amelyekhez a Neptun
   felismerhető azonosítót, és órarendi adatot vagy értelmezhető megjegyzést ad.
   Hiányzó időpontnál ezt jelzi, és nem állítja, hogy nincs ütközés.
@@ -362,9 +376,11 @@ figyelmeztet.
 
 ## Adatvédelem
 
-Az NPU a böngésződben fut, és semmilyen adatot nem küld saját szerverre. A
-Rajtoló tervei, a beállítások és a legutóbb látott NPU-verzió helyben maradnak,
-jelszót a v3 nem tárol.
+Az NPU a böngésződben fut, és semmit nem küld saját szerverre: ilyen
+szerverünk nincs is. A Rajtoló tervei, a beállítások és a legutóbb látott NPU-verzió helyben maradnak,
+jelszót a v3 nem tárol. A bekapcsolt Fejlesztői mód naplója csak a memóriában
+él, a Mérőmód mintái helyben maradnak; mindkettő maszkolt, és csak az kerül ki
+belőlük, amit te másolsz ki és küldesz el.
 
 <details>
 <summary>Mi történik a régi (2.x) adatokkal?</summary>
@@ -412,29 +428,44 @@ listáját](docs/TESTED.md), majd írd meg, pontosan melyik funkció nem működ
 </details>
 
 <details>
-<summary><strong>A Rajtoló nem indul</strong></summary>
+<summary><strong>A Rajtoló nem veszi fel a tárgyat</strong></summary>
 
-Töltsd újra az oldalt bejelentkezett állapotban, majd állítsd össze újra a
-tervet.
+A tárgy alatt álló szöveg megmondja, miért nem:
+
+- **Nincs szabad kurzus a sorrendedben:** minden bekapcsolt kurzusod betelt.
+  Válassz kézzel a Neptunban, vagy kapcsolj be másik kurzust a Rajtolóhoz.
+- **A Neptun nem vette fel:** a Neptun saját üzenete áll utána, például hogy
+  még nincs nyitva a tárgyfelvétel, vagy nem teljesül egy előfeltétel.
+- **Bizonytalan:** a szerver nem válaszolt időben. Nézd meg a Neptunban, mielőtt
+  újra kattintasz.
 
 </details>
 
-**Hibabejelentés** a [GitHub issue trackerben](https://github.com/varannaibence/npu-uj-neptunhoz/issues):
-add meg a verziót (a lap alján olvasható), az intézményt, az oldalt és a
-reprodukálás lépéseit. Képernyőkép jöhet, de jelszót, sütit, belépési tokent vagy
-teljes hálózati exportot ne csatolj.
+Ha nem jutsz dűlőre, írj nekünk a [GitHub issue
+trackerben](https://github.com/varannaibence/npu-uj-neptunhoz/issues). Sokat
+segít, ha megírod a verziót (a lap alján olvasható), az intézményedet, az oldalt,
+és hogy mit csináltál, mielőtt elromlott. Képernyőkép jöhet, de jelszót, sütit,
+belépési tokent vagy teljes hálózati exportot ne csatolj.
 
 ## Közösség és közreműködés
 
-- **Kérdés, ötlet, intézményi tapasztalat:** [GitHub
-  Discussions](https://github.com/varannaibence/npu-uj-neptunhoz/discussions)
-- **Új funkció:** modulként, pull requestben — lásd
-  [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
-- **Változásnapló:** [docs/CHANGELOG.md](docs/CHANGELOG.md)
+Az NPU attól lesz jobb, hogy minél több egyetemen kipróbálják. Ha a tiéden
+működik (vagy épp nem), azt is szívesen halljuk.
+
+- Kérdés, ötlet, intézményi tapasztalat: [GitHub
+  Discussions](https://github.com/varannaibence/npu-uj-neptunhoz/discussions).
+- Saját funkciót modulként, pull requestben küldhetsz; a módját a
+  [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) írja le.
+- Hogy mi változott és mikor, azt a [docs/CHANGELOG.md](docs/CHANGELOG.md) mutatja.
 
 ## Szerzők és licenc
 
-Az NPU eredeti szerzője Mate Solymosi; az új Neptun-felülethez készült v3-at
-Varannai Bence írja.
+Az NPU-t eredetileg Mate Solymosi írta, a régi Neptunhoz. Az új felülethez
+készült v3-at Varannai Bence írja. Minden hibajegy és minden egyetemről jött
+visszajelzés beleszól abba, merre megy tovább.
 
-[MIT License](LICENSE) — a program saját felelősségre használható.
+[MIT License](LICENSE). Nem hivatalos, a Neptun fejlesztőjétől és az
+egyetemektől független kiegészítő, saját felelősségre használható; a
+tárgyfelvétel eredményét mindig nézd meg a Neptunban is. Mielőtt a Rajtolót
+használod, olvasd el a [Felelősség és használat](docs/FELELOSSEG.md) lapot, és
+nézd meg az intézményed Neptun-szabályzatát.

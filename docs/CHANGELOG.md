@@ -2,6 +2,45 @@
 
 ## Következő kiadás
 
+## 3.3.0 — 2026. szept. 30. <a name="v3.3.0"></a>
+
+**Rajtoló**
+
+- Új, gyors, kattintásos felvétel: a Rajtoló ablakában tárgyanként egy
+  **Felvétel** gomb van. Egy kattintásra friss kurzuslistát kér, a sorrended
+  szerinti szabad kurzusokkal felveszi a tárgyat, és kiírja a Neptun válaszát.
+  Utána a következő tárgy gombja kap fókuszt.
+- Ha a beküldött kurzus közben betelt, ugyanazon a kattintáson belül a
+  következővel próbálja, legfeljebb négyszer, és ugyanazt a kurzust soha nem
+  küldi el kétszer. Hogy betelt-e, azt a friss kurzuslistából dönti el, nem az
+  üzenet szövegéből.
+- A Rajtoló többé nem küld magától tárgyfelvételt: megszűnt az időzített
+  indítás, a nyitás körüli újraküldés, a betelt tárgyak figyelése, a
+  munkamenet életben tartása és a nyitási emlékeztető. Egy kattintás egy tárgy,
+  egyszerre egy. Utánanéztünk: az ilyen scriptek terhelik a szervert, és volt
+  már miattuk fegyelmi eljárás, ezért így a legbiztonságosabb.
+- Letisztult ablak: a tárgyak sorrendje és a **Felvétel** gombok, a sorrend
+  szerkesztése tárgyanként lenyitható, a kurzuskódok és időpontok saját kérés
+  nélkül látszanak. A **Kurzusválasztás**, az ütközésjelzés és a
+  kredit-előrejelzés megmaradt.
+
+**Egyéb**
+
+- Új [Felelősség és használat](FELELOSSEG.md) lap: mit vállalunk, mire
+  figyelj, és miért nézd meg az intézményed Neptun-szabályzatát.
+- Új, alapból kikapcsolt **Fejlesztői mód** („Fejlesztői eszközök” csoport):
+  napló az API-hívásokról (metódus, státusz, időtartam, időtúllépés), a
+  munkamenet-váltásokról, az útvonalakról, a szerveróra-eltérésről, a Rajtoló
+  lépéseiről és az eddig csendben elnyelt hibákról, szerveridővel; állapotlap a
+  token lejártáról és a bekapcsolt modulokról. A Tampermonkey menüjéből
+  („NPU fejlesztői eszközök”) nyílik. A **Beküldés GitHubon** gomb a vágólapra
+  másolja, és megnyitja a GitHub „Mérés” űrlapját, ahová csak be kell illeszteni.
+  Csak memóriában él, maszkolva, és magától semmit nem küld el.
+- A Fejlesztői mód része a **Mérőmód**: maszkolva elmenti a Neptun még nem mért
+  tárgyfelvételi válaszait (sikeres jelentkezés, betelt kurzus elutasítása,
+  leadás, kurzuscsere), kézi és Rajtolós felvételnél egyaránt.
+- Ha egy modul indításkor hibára fut, a többi modul ettől még elindul.
+
 ## 3.2.0 — 2026. szept. 29. <a name="v3.2.0"></a>
 
 **Rajtoló**

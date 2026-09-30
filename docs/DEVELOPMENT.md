@@ -131,18 +131,37 @@ kapjon, és a részei külön is érthetők maradjanak.
 src/modules/rajtolo/
   index.js      állapot, interceptor-kötések, mountolás
   plan.js       a terv adatai és minden tiszta transzformációja
-  protocol.js   mit jelentenek a szerver válaszai, mi menjen legközelebb
-  engine.js     maga a futás, injektált hatásokkal
+  protocol.js   melyik kurzusokat küldi egy kattintás, mit jelent a válasz
+  engine.js     egy kattintás, befecskendezett kérésekkel
   net.js        a modul saját hitelesített kérései
-  ui.js         a tervező dialógus
+  ui.js         a Rajtoló ablaka
   rows.js       a kapcsoló és a badge az oldalon
+  suggest.js    az Órarendjavaslatok
   constants.js  mért horgonyok és hangolható értékek
 ```
 
-A `plan.js`, a `protocol.js` és az `engine.js` DOM- és hálózatmentes, ezért a
-selfcheck közvetlenül hajtja őket. A hálózati adatfeldolgozás a mért
+A `plan.js` és a `protocol.js` DOM- és hálózatmentes, ezért a selfcheck
+közvetlenül hajtja őket; az `engine.js` kattintását hamis kérésekkel teszteljük. A hálózati adatfeldolgozás a mért
 JSON-válaszokra épül; a DOM csak a Neptun meglévő elemeihez való óvatos
 illesztésre szolgál.
+
+A Fejlesztői mód szintén mappa:
+
+```text
+src/devlog.js              a napló gyűrűpuffere; kikapcsolva no-op
+src/modules/devTools/
+  index.js    a modul: interceptor-, auth- és route-kötések, állapotkép
+  samples.js  Mérőmód: a még nem mért válaszok maszkolt mintái
+  panel.js    a Tampermonkey menüből nyíló ablak (Napló, Állapot, Minták)
+```
+
+Bármely fájl írhat a naplóba (`devlog.log(kind, üzenet)`, elnyelt hibánál
+`devlog.error(hol, hiba)`); amíg a Fejlesztői mód ki van kapcsolva, ez semmit
+sem csinál. A naplóba csak hibabejelentésbe is való adat kerülhet: végpontnév,
+státusz, időtartam, állapotváltás. URL-lekérdezés, fejléc, token, Neptun-kód,
+tárgynév nem; szerverszöveg csak `devlog.maskText` után. A modulok indítását
+az `index.js` naplózza, és egy induláskor hibára futó modul már nem akasztja
+meg a többit.
 
 Az `src/storage.js` inicializáláskor megtisztítja a korábbi v1/v3
 `data.users` rekordokban maradt credential mezőket, miközben a terveket és más
@@ -170,8 +189,9 @@ ugyanazon originre megy, és kizárólag az alkalmazás korábban látott
 | `occupancy`                                | A **Betelt kurzusok hátra** kapcsoló csak a már betöltött kurzuslisták sorrendjét módosítja. A `GetSubjectsCourses` válaszait passzívan figyeli, és nem indít teljes tárgykatalógus-scan-t.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `courseConflictHints` / `registrationData` | A `GetScheduledCourses` szűrésfüggetlen válaszát figyeli, és a felvett állapothoz csak ismert válaszmezőket használ. Ha az intézmény csak a planner megnyitásakor küldi a választ, a félév-ID ismeretében legfeljebb egy késleltetett fallback GET-et indít. A `GetSubjectsCourses` válaszait passzívan átveszi a Neptun saját tárgynyitásából; a teljes tárgykatalógust nem járatja végig háttérben.                                                                                                                                                                                                                               |
 | `creditBreakdown`                          | Miután az app saját `SchedulableSubjects` kéréséből látja a numerikus `request.termId` értéket, modulindításonként egyszer indít `GET SubjectApplication/ScheduledSubjectsWithScheduledCourses?request.termId=<numeric-term-id>&request.withRegisteredSubjects=true` kérést. A `<numeric-term-id>` itt a kérésből jön, nem a válaszsor GUID-formájú `termId` mezőjéből.                                                                                                                                                                                                                                                             |
-| `rajtolo`                                  | A tervező megnyitásakor `GET Periods/GetPeriods`, valamint szükség esetén a mentett kurzusok címkéihez `GET SubjectApplication/GetSubjectsCourses`; futtatáskor ugyanez frissíti a kurzusállapotot: a nyitás előtt 20 mp-cel tárgyanként egyszer, sorosan előre, hogy nyitáskor csak a beküldés menjen. A beküldés külön, soros `POST SubjectApplication/SubjectSignin` (401 esetén a Neptunnal frissíttetett tokennel egyszer újraküldi, ha közben nem állították le; a mért „nincs tárgyjelentkezési időszak” válaszra a futás első 30 mp-ében 300 ms-onként újraküldi); az összes tárgy beküldése után tárgyanként egy ellenőrző `GET SubjectApplication/GetSubjectsCourses` (Leállítás után nincs). Ha a tervben be van kapcsolva a figyelés, a teljesen betelt tárgyak kurzuslistáját a választott ideig körönként, sorosan, körök között 1 mp szünettel újraolvassa, és szabad helynél azonnal beküldi. Elindítva, a munkamenethez nem küld saját `GetNewTokens`-t: lejárt tokennél a nyitás előtti 90 mp-ben, illetve 10 percnél régebbi tokennél megnyomja a Neptun saját `#filter-table` gombját, és a Neptun maga frissít. Az Órarendtervező **Javaslatok** gombjára egy `GET SubjectApplication/GetScheduledCourses` (friss Tervező), majd tárgyanként egy-egy, soros `GET SubjectApplication/GetSubjectsCourses` a kiválasztott tárgyakra. Megerősített alkalmazáskor és visszavonáskor soros `POST SubjectApplication/UnScheduleCourse` és `POST SubjectApplication/ScheduleSubjectAndCourses` a Neptun Tervezőjére, majd egy visszaolvasó `GetScheduledCourses`. |
+| `rajtolo`                                  | A **Felvétel** kattintásra, tárgyanként: egy `GET SubjectApplication/GetSubjectsCourses` (friss férőhely), egy `POST SubjectApplication/SubjectSignin`; elutasítás vagy bizonytalan válasz után még egy `GetSubjectsCourses`, és ha a beküldött kurzus közben betelt, a következő rangsorolt kurzussal újabb `SubjectSignin` (kattintásonként legfeljebb 4, ugyanaz a kurzus soha kétszer, időtúllépés után soha). Egyszerre egy tárgy. Lejárt tokennél előtte a Neptun saját `#filter-table` gombja (a Neptun frissít), `401`-re egy frissítés és egy újraküldés. Az Órarendtervező **Javaslatok** gombjára egy `GET SubjectApplication/GetScheduledCourses` (friss Tervező), majd tárgyanként egy-egy, soros `GET SubjectApplication/GetSubjectsCourses` a kiválasztott tárgyakra. Megerősített alkalmazáskor és visszavonáskor soros `POST SubjectApplication/UnScheduleCourse` és `POST SubjectApplication/ScheduleSubjectAndCourses` a Neptun Tervezőjére, majd egy visszaolvasó `GetScheduledCourses`. |
 | `infiniteSession`                          | Saját kérést nem küld. A tárgyfelvételi oldalon, ha az oldal 12,5 perce nem küldött saját API-kérést, vagy a legutóbbi tokenfrissítés 10 percnél régebbi és a token lejárt, megnyomja a Neptun saját `#filter-table` gombját, és a Neptun maga frissít; más oldalon nem csinál semmit.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `devTools`                                 | Saját kérést nem küld; az interceptoron át csak figyel.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `dailyOverview`                            | A kezdőlap megnyitásakor (és bejelentkezés után naponta legfeljebb egyszer, az értesítéshez) `GET Calendar/GetStudentTrainings`, `GET Calendar/GetCalendarEvents` (órák, vizsgák, időszakok, szünnapok, −60…+45 nap), `GET FinancialItem/GetItemsToBePayed`; 10 percig gyorsítótárazva.                                                                                                                                                                                                                                                                                                                                             |
 | `gradeCalculator`                          | Csak az Átlagkalkulátor megnyitásakor (az eredmény Neptun-kódonként megmarad, hálózati hiba után a következő megnyitás újrapróbálja): `GET RegistrySheet/GetAdditionalStudentTrainingTermData`, majd legfeljebb három félévre `GET RegistrySheet/GetStudentTrainingTermData` és `GET RegistrySheet/GetStudentTakenSubjectsByTerm` a képlet ellenőrzéséhez. A tárgylistát a `TakenSubjects` válaszából passzívan veszi.                                                                                                                                                                                                                                                                           |
 
@@ -212,9 +232,13 @@ szerződése, a PR négy követelménye és a review folyamata.
 
 Módosítás előtt olvasd el a [mért API-katalógust](API.md). Neptun- vagy
 intézményi állítást csak mért adat alapján írj le; a bizonytalan válaszra a kódnak
-és a dokumentációnak is fail-closed módon kell viselkednie. A Rajtoló élő
-sikeres beküldése és a valóban betelt kurzus elutasítása külön éles mérési kapu,
-nem helyettesíti őket egy unit teszt vagy egy zárt időszak hibaválasza.
+és a dokumentációnak is fail-closed módon kell viselkednie. A sikeres natív
+tárgyfelvétel válasza és a valóban betelt kurzus elutasítása külön éles mérési
+kapu; nem helyettesíti őket egy unit teszt vagy egy zárt időszak hibaválasza.
+
+A Rajtoló `SubjectSignin`-t csak a hallgató kattintására küld, egyszerre egy
+tárgyra; nincs időzített indítás, azonos kérés ismétlése vagy férőhelyfigyelés.
+A háttér a README „Miért nem jelentkezik helyetted magától?” részében van.
 
 A munkafa többi módosítását őrizd meg, és munkafeladatból ne készíts automatikus
 commitot. A felhasználó által beküldött hibajegybe ne kerüljön hitelesítési

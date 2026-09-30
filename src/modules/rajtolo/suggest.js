@@ -17,9 +17,8 @@ const interceptor = require("../../interceptor");
 const { suggestSchedules, STRATEGIES } = require("../../timetableSolver");
 const logo = require("../../logo");
 const plan = require("./plan");
-const { liveGet, liveSchedule, liveUnschedule, freshenAuth } = require("./net");
+const { liveGet, liveSchedule, liveUnschedule, freshenAuth, withRenewal, isHalted } = require("./net");
 const { STATUS_KEY } = require("./constants");
-const { withRenewal, isHalted } = require("./engine");
 const modal = require("../../modal");
 const { showToast } = require("../../toast");
 const ui = require("./ui");
@@ -237,8 +236,13 @@ function applyVariant(currentPlan, variant, strategy, info) {
       group.ranking.filter(id => id !== pick.courseId && !fitting.includes(id) && !clashing.includes(id))
     );
     const groups = subject.groups.map(g => (g === group ? Object.assign({}, g, { ranking }) : g));
+    // A course new to the ranking is named in the dialog from the plan's own notes.
+    const courses = Object.assign({}, subject.courses);
+    if (!courses[pick.courseId]) {
+      courses[pick.courseId] = plan.courseNote(course);
+    }
     next = Object.assign({}, next, {
-      subjects: next.subjects.map(s => (s === subject ? Object.assign({}, s, { groups }) : s)),
+      subjects: next.subjects.map(s => (s === subject ? Object.assign({}, s, { groups, courses }) : s)),
     });
   });
   return next;
@@ -726,16 +730,14 @@ function renderPanel(state) {
     // show and which may clash with the new picks: only a whole variant is applied.
     const partial = variant.metrics.unplaced > 0;
     const apply = smallAction(ops.length > 0 ? "Alkalmazás…" : "Alkalmazás a Rajtolóba", true);
-    apply.disabled = state.running || partial;
-    apply.title = state.running
-      ? "A Rajtoló fut; leállítás után alkalmazható."
-      : partial
-        ? "Egy csoport nem fér be ütközés nélkül, így ez a javaslat nem alkalmazható; a meglévő kurzusa ütközhetne az újakkal."
-        : ops.length > 0
-          ? "A Neptun Tervezőjében és a Rajtolóban alkalmazza; előtte megmutatja, mi változik."
-          : "A Rajtoló sorrendjét rendezi át; visszavonható.";
+    apply.disabled = partial;
+    apply.title = partial
+      ? "Egy csoport nem fér be ütközés nélkül, így ez a javaslat nem alkalmazható; a meglévő kurzusa ütközhetne az újakkal."
+      : ops.length > 0
+        ? "A Neptun Tervezőjében és a Rajtolóban alkalmazza; előtte megmutatja, mi változik."
+        : "A Rajtoló sorrendjét rendezi át; visszavonható.";
     apply.addEventListener("click", () => {
-      if (state.running || partial) {
+      if (partial) {
         return;
       }
       confirmApply(state, variant, ops, rajtoloChanges);
@@ -744,7 +746,6 @@ function renderPanel(state) {
   }
   if (view.undo && !view.busy) {
     const undo = smallAction("Visszavonás");
-    undo.disabled = state.running;
     undo.addEventListener("click", () => undoApply(state));
     actions.appendChild(undo);
   }
@@ -788,7 +789,7 @@ function rajtoloAffected(variant) {
 }
 
 function applyToRajtolo(state, variant) {
-  if (writing || view.busy || view.stale || state.running) {
+  if (writing || view.busy || view.stale) {
     return;
   }
   view.undo = {
@@ -824,7 +825,7 @@ function rajtoloLines(variant) {
       if (pick.changed) {
         parts.push(
           `${course ? courseLabel(course) : "kurzus"} a sor elejére${
-            fresh ? " (eddig nem volt a sorrendedben, a Rajtoló erre is jelentkezni fog)" : ""
+            fresh ? " (eddig nem volt a sorrendedben; a Rajtoló ezt is bejelöli)" : ""
           }`
         );
       }
@@ -907,7 +908,7 @@ function liveStep(step) {
   return (step.kind === "add" ? liveSchedule : liveUnschedule)(step.record, step.courseId);
 }
 
-// Planner steps for one student: renewed like the Rajtoló's requests (a 401 on these
+// Planner steps for one student: renewed through withRenewal (a 401 on these
 // calls is measured unprocessed - Neptun itself resends it, docs/API.md), and never
 // sent once another user is logged in.
 function plannerSender(code) {
@@ -1028,9 +1029,7 @@ function runApply(state, variant, ops, rajtoloChanges) {
           return;
         }
         const saved = rajtoloChanges ? touchedRankings(state.plan, variant, info) : [];
-        // Not while armed: the run keeps the plan it was started with (as the row switch).
-        const rajtoloApplied =
-          rajtoloChanges && !state.running && utils.getNeptunCode() === code && state.plan.termId === termId;
+        const rajtoloApplied = rajtoloChanges && utils.getNeptunCode() === code && state.plan.termId === termId;
         if (rajtoloApplied) {
           state.plan = applyVariant(state.plan, variant, strategy, info);
           ui.persistPlan(state);
@@ -1056,7 +1055,7 @@ function runApply(state, variant, ops, rajtoloChanges) {
 // go back (later edits stay), and the planner steps are reversed and read back.
 function undoApply(state) {
   const undo = view.undo;
-  if (writing || state.running || view.busy || !undo) {
+  if (writing || view.busy || !undo) {
     return;
   }
   view.undo = null;
@@ -1392,7 +1391,7 @@ function authLeftMs() {
 }
 
 // Neptun renews only an EXPIRED token, and only on its own request: its search button
-// makes one (the Rajtoló's path too). A token about to expire is waited out first -
+// makes one (infiniteSession's path too). A token about to expire is waited out first -
 // pressed early, the search goes out with the old token and nothing is renewed.
 function ensureAuth() {
   const left = authLeftMs();

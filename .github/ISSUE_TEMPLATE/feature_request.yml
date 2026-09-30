@@ -1,0 +1,30 @@
+name: Funkciókérés
+description: Ötlet új funkcióra vagy meglévő javítására
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Mi is hallgatók vagyunk, úgyhogy a legjobb ötletek abból jönnek, ami téged idegesít a Neptunban. Írd le bátran.
+
+        Az NPU funkciói kis, külön kapcsolható modulok. Saját modult a [CONTRIBUTING.md](https://github.com/varannaibence/npu-uj-neptunhoz/blob/master/docs/CONTRIBUTING.md) alapján pull requestben is beküldhetsz.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Milyen problémát old meg?
+      description: Mi az, ami most kényelmetlen vagy hiányzik a Neptunban?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Hogyan képzeled el?
+      description: Melyik Neptun-oldalon jelenne meg, és mit csinálna.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Most hogyan oldod meg?
+    validations:
+      required: false

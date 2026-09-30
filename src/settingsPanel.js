@@ -126,6 +126,10 @@ function setRegistry(modules) {
   registry = modules.filter(module => module && module.meta && module.meta.id);
 }
 
+function getRegistry() {
+  return registry.slice();
+}
+
 // The panel's sections, in this order; they mirror the README's feature tables. A
 // module names its section by id in `meta.group`; one without a known id lands in
 // "Egyéb" at the end rather than disappearing.
@@ -134,6 +138,7 @@ const GROUPS = [
   { id: "rajtolo", name: "Rajtoló" },
   { id: "daily", name: "Mindennapok" },
   { id: "comfort", name: "Megjelenés és kényelem" },
+  { id: "developer", name: "Fejlesztői eszközök" },
 ];
 
 // Pure: modules -> [{ id, name, modules }], empty sections left out.
@@ -560,4 +565,4 @@ function registerMenuCommand() {
   }
 }
 
-module.exports = { setRegistry, open, registerMenuCommand, groupModules, GROUPS };
+module.exports = { setRegistry, getRegistry, open, registerMenuCommand, groupModules, GROUPS };

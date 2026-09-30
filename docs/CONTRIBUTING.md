@@ -1,6 +1,7 @@
 # Közreműködés
 
-Az NPU funkciói **modulok**. Egy modul egy fájl, be- és kikapcsolható, és pull
+Van egy ötleted, ami megkönnyítené a Neptunt? Írd meg modulként. Az NPU
+funkciói **modulok**: egy modul egy fájl, be- és kikapcsolható, és pull
 requestben kerül be. Ez a lap arról szól, hogyan írj egyet.
 
 A fejlesztői környezet, a build és a parancsok a

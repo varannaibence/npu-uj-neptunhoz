@@ -4,19 +4,13 @@
 const storage = require("../../storage");
 const utils = require("../../utils");
 const timetable = require("../../timetable");
-const {
-  PLANS_KEY,
-  DEFAULT_DELAY_SECONDS,
-  STATUS_KEY,
-  WAITLIST_MODES,
-  DEFAULT_WAITLIST_MODE,
-  WATCH_MINUTES,
-} = require("./constants");
+const { PLANS_KEY, WAITLIST_MODES, DEFAULT_WAITLIST_MODE } = require("./constants");
 
 const { toMinutes, normaliseSlot, courseSlots, slotsOverlap, findPlanConflicts } = timetable;
 
-// Every field SubjectSignin needs, straight off the row. Accumulates into `into`, so
-// subjects seen across separate page loads or filters are not lost.
+// The subject's four ids (Neptun's register button is named after them), straight off
+// the row. Accumulates into `into`, so subjects seen across separate page loads or
+// filters are not lost.
 function collectSubjects(json, into) {
   const map = into || new Map();
   const rows = (json && json.data) || [];
@@ -85,7 +79,7 @@ function totalCredits(totals) {
 
 // subjectId -> courseId -> {id, code, type, typeId, isFull, isSigned, isOnWaitingList,
 // isRankingCourse, slots}. `type` is the group label; `typeId` is the measured,
-// language-neutral group identity. `id` goes into SubjectSignin's courseIds[].
+// language-neutral group identity. `id` is the course's own id.
 function collectCourses(json, into) {
   const map = into || new Map();
   const rows = (json && json.data) || [];
@@ -113,97 +107,10 @@ function collectCourses(json, into) {
   return map;
 }
 
-// The shape <input type="datetime-local"> accepts. String-based, never a round-trip
-// through `new Date()`: these dates arrive with no timezone suffix because they are
-// already local wall-clock time, so parsing one would pass it through this machine's
-// timezone and corrupt a value that never had one.
-const DATETIME_LOCAL_RE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/;
-function toDateTimeLocal(isoish) {
-  const match = typeof isoish === "string" && DATETIME_LOCAL_RE.exec(isoish);
-  return match ? match[1] : null;
-}
-
-// periodType and periodName are display text: shown for the human to read, never
-// matched on to decide which period is "the" registration one. Listing every period
-// and letting the user pick is independent of the label, and less code than
-// guessing. Rows without a usable fromDate cannot be scheduled against anyway.
-function collectPeriods(json) {
-  const rows = (json && json.data) || [];
-  return rows
-    .map(row => {
-      const fromDate = row && toDateTimeLocal(row.fromDate);
-      if (!row || !row.periodId || !fromDate) {
-        return null;
-      }
-      return {
-        periodId: row.periodId,
-        label: [row.periodType, row.periodName].filter(Boolean).join(" — ") || "Ismeretlen tárgyfelvételi időszak",
-        fromDate,
-        toDate: toDateTimeLocal(row.toDate),
-      };
-    })
-    .filter(Boolean);
-}
-
-function periodLoadResult(json) {
-  const status = Number(json && json[STATUS_KEY]);
-  if (status === 401) {
-    return {
-      periods: [],
-      reason: "auth-required",
-      message: "A munkamenet lejárt. Jelentkezz be újra, majd töltsd újra az időszakokat.",
-    };
-  }
-  const notifications = json && Array.isArray(json.notification) ? json.notification : null;
-  const data = json && Array.isArray(json.data) ? json.data : null;
-  const notificationText =
-    notifications &&
-    notifications
-      .map(item => (item && typeof item.description === "string" ? item.description : ""))
-      .filter(Boolean)
-      .join(" ");
-  if (notificationText && /bejelentkezés|munkamenet|session|unauthori[sz]ed|401/i.test(notificationText)) {
-    return {
-      periods: [],
-      reason: "auth-required",
-      message: "A munkamenet lejárt. Jelentkezz be újra, majd töltsd újra az időszakokat.",
-    };
-  }
-  if (typeof status === "number" && !Number.isNaN(status) && status !== 0 && (status < 200 || status > 299)) {
-    return {
-      periods: [],
-      reason: "api-error",
-      message: "A Neptun nem tudta betölteni a tárgyfelvételi időszakokat.",
-    };
-  }
-  if (!notifications || !data || notifications.length > 0) {
-    return {
-      periods: [],
-      reason: "api-error",
-      message: "Érvénytelen válasz érkezett a tárgyfelvételi időszakokról.",
-    };
-  }
-  const periods = collectPeriods({ data });
-  if (periods.length > 0) {
-    return { periods, reason: null, message: null };
-  }
-  return {
-    periods: [],
-    reason: status >= 400 ? "api-error" : "empty",
-    message:
-      status >= 400
-        ? "A Neptun nem tudta betölteni a tárgyfelvételi időszakokat."
-        : "Ehhez a félévhez nem érkezett használható tárgyfelvételi időszak.",
-  };
-}
-
 function emptyPlan(termId) {
   return {
     termId: termId || null,
-    startAt: null,
-    delaySeconds: DEFAULT_DELAY_SECONDS,
     waitlistMode: DEFAULT_WAITLIST_MODE,
-    watchMinutes: 0,
     subjects: [],
   };
 }
@@ -216,11 +123,11 @@ function loadPlan(termId) {
   if (!stored || stored.termId !== termId || !Array.isArray(stored.subjects)) {
     return emptyPlan(termId);
   }
-  const delay = Number(stored.delaySeconds);
   const subjects = stored.subjects
     .filter(subject => subject && typeof subject.subjectId === "string" && subject.subjectId)
     .map(subject => ({
       ...subject,
+      courses: storedCourses(subject.courses),
       groups: Array.isArray(subject.groups)
         ? subject.groups
             .filter(group => group && Array.isArray(group.ranking))
@@ -234,12 +141,31 @@ function loadPlan(termId) {
     }));
   return {
     termId,
-    startAt: typeof stored.startAt === "string" ? stored.startAt : null,
-    delaySeconds: Number.isFinite(delay) && delay >= 1 ? delay : DEFAULT_DELAY_SECONDS,
     waitlistMode: WAITLIST_MODES.includes(stored.waitlistMode) ? stored.waitlistMode : DEFAULT_WAITLIST_MODE,
-    watchMinutes: WATCH_MINUTES.includes(Number(stored.watchMinutes)) ? Number(stored.watchMinutes) : 0,
     subjects,
   };
+}
+
+// What the plan keeps of each ranked course: its code and times, so the dialog can
+// name it and check clashes without a request of its own. Seats are never stored;
+// they come from the list Neptun shows at the click.
+function courseNote(course) {
+  return {
+    code: typeof course.code === "string" ? course.code : "",
+    slots: Array.isArray(course.slots) ? course.slots : [],
+  };
+}
+
+function storedCourses(courses) {
+  const kept = {};
+  if (courses && typeof courses === "object") {
+    Object.keys(courses).forEach(id => {
+      if (courses[id] && typeof courses[id] === "object") {
+        kept[id] = courseNote(courses[id]);
+      }
+    });
+  }
+  return kept;
 }
 
 function savePlan(plan) {
@@ -263,7 +189,7 @@ function addSubject(plan, subjectRecord) {
   if (plan.subjects.some(s => s.subjectId === subjectRecord.subjectId)) {
     return plan;
   }
-  const entry = Object.assign({}, subjectRecord, { groups: [] });
+  const entry = Object.assign({}, subjectRecord, { groups: [], courses: {} });
   return Object.assign({}, plan, { subjects: plan.subjects.concat(entry) });
 }
 
@@ -305,7 +231,7 @@ function toggleCourseInPlan(plan, subjectRecord, course) {
   }
   const base = plan.termId ? plan : Object.assign({}, plan, { termId: subjectRecord.termId || null });
   const existing = base.subjects.find(s => s.subjectId === subjectRecord.subjectId);
-  const subject = existing || Object.assign({}, subjectRecord, { groups: [] });
+  const subject = existing || Object.assign({}, subjectRecord, { groups: [], courses: {} });
   const group = subject.groups.find(g => sameCourseGroup(g, course)) || {
     type: course.type,
     typeId: course.typeId || null,
@@ -318,7 +244,13 @@ function toggleCourseInPlan(plan, subjectRecord, course) {
     .filter(g => g !== group)
     .concat(ranking.length > 0 ? [{ type: course.type, typeId: course.typeId || group.typeId || null, ranking }] : []);
 
-  const nextSubject = Object.assign({}, subject, { groups });
+  const courses = Object.assign({}, subject.courses);
+  if (selected) {
+    delete courses[course.id];
+  } else {
+    courses[course.id] = courseNote(course);
+  }
+  const nextSubject = Object.assign({}, subject, { groups, courses });
   const others = base.subjects.filter(s => s.subjectId !== subjectRecord.subjectId);
   // A subject with nothing ranked would only resolve to "unconfigured" at run time.
   const subjects =
@@ -385,8 +317,6 @@ function swapCourses(plan, subjectId, courseId, otherId) {
 module.exports = {
   collectSubjects,
   collectCourses,
-  collectPeriods,
-  periodLoadResult,
   registeredCredits,
   plannedCredits,
   mergeCredits,
@@ -395,9 +325,9 @@ module.exports = {
   normaliseSlot,
   slotsOverlap,
   findPlanConflicts,
-  toDateTimeLocal,
   emptyPlan,
   loadPlan,
+  courseNote,
   savePlan,
   addSubject,
   removeSubject,
